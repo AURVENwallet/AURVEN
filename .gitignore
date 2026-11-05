@@ -18,6 +18,7 @@
 *.wallet
 *TEST-KEYS*.json
 reservations.jsonl
+aurven-test-vault-*.json
 .DS_Store
 Thumbs.db
 .vscode/

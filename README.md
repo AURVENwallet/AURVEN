@@ -23,7 +23,7 @@ node --test test/*.test.mjs
 python -m http.server 8937 --bind 127.0.0.1 --directory ui
 ```
 
-Open http://127.0.0.1:8937/ . Use the **Chinese / EN** language selector in the header; the choice persists between pages and reloads. Switching languages preserves form input, proof results and simulation progress. Exported protocol data stays language-independent. The browser does not store signing seeds.
+Open http://127.0.0.1:8937/ . Use the **Chinese / EN** language selector in the header; the choice persists between pages and reloads. Switching languages preserves form input, proof results and simulation progress. Exported protocol data stays language-independent. The optional Test Wallet vault stores a newly generated test seed locally in encrypted form; it is not connected to browser signing.
 
 For the local wallet demo, start a separate local chain, then run the demo in another terminal:
 
@@ -40,6 +40,18 @@ The demo creates fresh disposable keys and a new account on your own machine. Op
 ## Engineering record
 
 The sections below document successive implementation stages. Test counts and pending work in a stage describe that stage; see [SECURITY.md](SECURITY.md) for the release-check summary and known limitations.
+
+## Latest milestone: encrypted test vault and leaf journal (2026-11-05)
+
+Test Wallet now includes a browser-local vault: generate fresh test keys, unlock with a password, lock manually, auto-lock when leaving/backgrounding the page or after two idle minutes, export an encrypted backup and import a backup into read-only recovery mode. The interface is available in Chinese and English and keeps the existing black/gold design. It requires HTTPS or loopback, Web Crypto, Web Locks and IndexedDB strict write transactions; unsupported storage fails closed. No additional dependency, server database or paid service is required.
+
+The vault uses AES-256-GCM, PBKDF2-HMAC-SHA-256 with 600,000 iterations, fresh random salt and IV, and authenticated metadata. It never uploads its password, seed or backup. Backups must still be kept private and are excluded from source publication. This is a test storage prototype, not an audited custody product.
+
+The reservation service serializes cooperating tabs, authenticates the current journal and commits a leaf reservation before a signing caller may return a proof. Compare-and-swap rejects unexpected changes; storage failure stops signing. Tests connect this callback to the existing disposable signer. **The website does not yet sign, deploy accounts or broadcast using its encrypted seed.** Browser signing, pending-transaction recovery and public-testnet execution remain separate milestones.
+
+**Every imported backup is permanently read-only in this version.** A backup and the on-chain leaf counter cannot prove that no later off-chain signature exists. A lower revision is detected only if already observed by the live vault object; complete browser-profile rollback across restart is not reliably detected. Multi-device signing and independent recovery authorization are not implemented. See [key trees, reservation ordering and recovery boundaries](docs/KEY_STATE.md).
+
+Validation for this milestone adds 16 Node tests and a six-check browser harness for actual IndexedDB and Web Locks. It does not simulate physical power failure or establish cryptographic security. P0-B remains partially implemented until the remaining recovery and signing gates are resolved. The older milestone records below describe their state at the time.
 
 ## Latest wallet milestone: complete local flow (2026-11-05)
 
@@ -91,7 +103,9 @@ The review covers network configuration, signing and verification paths, account
 | ui/lib/evmwots.js, keccak.js, sha256.js | Off-chain derivation, signing and proof encoding. EVM verification chains use Keccak; key derivation uses SHA-256. |
 | src/Wots.sol | Solidity verifier. Elements are 16 bytes, with 16 message digits and 2 checksum digits, up to 255 steps per chain, tree height 10 and 1024 leaves per root. A complete proof is 448 bytes. |
 | src/KeyLabAccount.sol, KeyLabFactory.sol | Account digests bind chainId, the account's own address, epoch, leaf index, deadline and call contents. Operations use separate domain tags. KeyLabFactory creates KeyLabAccount and cannot create BscTestAccount. |
-| ui/test-wallet-core.js, scripts/local-demo.mjs | Disposable test keys, pre-signing journals and the local account flow. Recoverable browser key storage is not yet implemented. |
+| ui/test-wallet-core.js, scripts/local-demo.mjs | Disposable test keys, pre-signing journals and the local account flow. |
+| ui/vault-crypto.js, ui/vault-store.js, ui/vault-service.js | Encrypted browser test vault, strict IndexedDB writes, cross-tab locking and append-only leaf reservations. |
+| ui/vault-ui.js, docs/KEY_STATE.md | Vault controls, auto-locking, read-only backup import and documented recovery limitations. |
 | test/ | Contract regression checks, signature-vector interoperability, client state and receipt checks. Integration between multisig and BscTestAccount still needs acceptance testing. |
 
 ## BSC architecture and risks
