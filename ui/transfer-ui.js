@@ -17,7 +17,7 @@ let demoLoading=false;
 if (!['localhost','127.0.0.1','[::1]'].includes(location.hostname)) {
   get('loadDemo').hidden=true;
   const guide=document.createElement('a');
-  guide.href='https://github.com/AURVENwallet/AURVEN#quick-start--快速开始';
+  guide.href='https://github.com/AURVENwallet/AURVEN#quick-start';
   guide.className='button run';guide.textContent='本地运行指南 ↗';
   get('loadDemo').after(guide);
   get('demoStatus').textContent='完整签名演示需在自己的电脑运行。请按指南启动本地网页和 Anvil；下方仍可准备离线草稿或读取 BSC 测试账户。';

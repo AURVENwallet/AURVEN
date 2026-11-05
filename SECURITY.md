@@ -1,8 +1,8 @@
-# Security status / 安全状态
+# Security status
 
 AURVEN is an experimental local/testnet prototype. This repository is not an independently audited wallet. Source checks and passing tests do not establish cryptographic security or suitability for real assets.
 
-AURVEN 是本地与测试网实验原型，尚未完成独立安全审计。以下是发布前检查记录，不是生产安全认证或抗量子强度证明。
+The checks below are a pre-publication record, not a production security certification or proof of post-quantum strength.
 
 ## Release checks — 2026-11-05
 
@@ -20,7 +20,7 @@ AURVEN 是本地与测试网实验原型，尚未完成独立安全审计。以�
 
 Scanner: [Gitleaks 8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). Dependency data: [OSV API](https://api.osv.dev/v1/query). The current automated workflow runs source checks, secret scanning, contract tests, runtime-pin verification and client tests. Workflow actions are pinned to commit IDs and receive read-only repository permissions.
 
-## Known limitations / 已知限制
+## Known limitations
 
 - **Cryptography:** the custom stateful WOTS/Merkle scheme uses 16-byte elements. Its parameters and quantum-security bounds require specialist evaluation. No security level is asserted here.
 - **One-time keys:** a leaf must never sign two different digests. The demo journals reservations before returning signatures and rejects reuse within one process. It is not a crash-recoverable, multi-device or browser vault. Each script invocation creates new keys; resuming an old test-key file is not supported.
@@ -31,7 +31,7 @@ Scanner: [Gitleaks 8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.
 - **Resource limits:** contract tests use a broad gas limit and some generate proofs inside a test. Those totals are not transaction gas quotes or worst-case gas bounds. RPC body-size and rate limits need production hardening.
 - **Test material:** deterministic fixture seeds are public, and demo keys are disposable local material. Never fund these accounts on a real network. Never publish demo-runs, expose an unlocked Anvil node, or serve the repository root.
 
-关键未完成项：密码学参数评估、加密密钥保管、恢复与旧备份防重用、跨标签页锁、公共测试网验证、多签兼容、独立 RPC 比对和独立安全审计。现有检查不能代替这些工作。
+Key unfinished work includes cryptographic-parameter evaluation, encrypted key custody, recovery and protection against reuse from old backups, cross-tab locking, public-testnet validation, multisig compatibility, independent RPC comparison and an independent security audit. Existing checks do not replace this work.
 
 ## Reproduce checks
 
