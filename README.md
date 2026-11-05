@@ -2,6 +2,10 @@
 
 <img src="ui/assets/aurven-mark-web.png" alt="AURVEN" width="72">
 
+- **官网 / Website:** [aurven.site](https://aurven.site)
+- **项目代币 / Project token:** [代币信息与税收用途 / Token details and tax use](https://aurven.site/token.html) · [Four.meme 购买入口 / Buy on Four.meme](https://four.meme/zh-TW/token/0x8614876e509c18d7be305a39a4a8d9e69c5effff)
+- **BNB Smart Chain CA:** `0x8614876e509c18d7be305a39a4a8d9e69c5effff`
+
 面向 BSC 的实验性哈希签名智能账户。包含中英文界面、可交互三维资金演示、公开证明验证和本地测试钱包流程。
 
 Experimental hash-signature smart accounts for BSC, with a Chinese / English interface, interactive 3D fund-flow simulation, public proof verification and a disposable local wallet demo.
