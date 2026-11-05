@@ -19,6 +19,7 @@
 *TEST-KEYS*.json
 reservations.jsonl
 aurven-test-vault-*.json
+aurven-public-proof-*.json
 .DS_Store
 Thumbs.db
 .vscode/

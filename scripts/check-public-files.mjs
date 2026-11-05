@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 
 const paths=execFileSync('git',['ls-files','-z'],{encoding:'utf8'}).split('\0').filter(Boolean);
 assert.ok(paths.length,'No tracked files to check');
-const prohibited=/(^|\/)(?:\.env(?:\..*)?|demo-runs|out|cache|broadcast|node_modules)(\/|$)|^ui\/demo\/|(?:\.pem|\.key|\.p12|\.pfx|\.keystore|\.wallet|\.log)$|(?:^|\/)aurven-test-vault-.*\.json$/i;
+const prohibited=/(^|\/)(?:\.env(?:\..*)?|demo-runs|out|cache|broadcast|node_modules)(\/|$)|^ui\/demo\/|(?:\.pem|\.key|\.p12|\.pfx|\.keystore|\.wallet|\.log)$|(?:^|\/)aurven-(?:test-vault|public-proof)-.*\.json$/i;
 for(const path of paths){
   assert.ok(!prohibited.test(path),'Local or sensitive path is tracked: '+path);
   assert.ok(!lstatSync(path).isSymbolicLink(),'Review symlinks before publishing: '+path);

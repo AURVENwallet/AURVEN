@@ -23,7 +23,7 @@ node --test test/*.test.mjs
 python -m http.server 8937 --bind 127.0.0.1 --directory ui
 ```
 
-Open http://127.0.0.1:8937/ . Use the **Chinese / EN** language selector in the header; the choice persists between pages and reloads. Switching languages preserves form input, proof results and simulation progress. Exported protocol data stays language-independent. The optional Test Wallet vault stores a newly generated test seed locally in encrypted form; it is not connected to browser signing.
+Open http://127.0.0.1:8937/ . Use the **Chinese / EN** language selector in the header; the choice persists between pages and reloads. Switching languages preserves form input, proof results and simulation progress. Exported protocol data stays language-independent. The optional Test Wallet vault stores a newly generated test seed locally in encrypted form. It supports verification-only browser signatures; account transaction signing is not connected.
 
 For the local wallet demo, start a separate local chain, then run the demo in another terminal:
 
@@ -41,7 +41,25 @@ The demo creates fresh disposable keys and a new account on your own machine. Op
 
 The sections below document successive implementation stages. Test counts and pending work in a stage describe that stage; see [SECURITY.md](SECURITY.md) for the release-check summary and known limitations.
 
-## Latest milestone: encrypted test vault and leaf journal (2026-11-05)
+## Latest milestone: browser signature self-check (2026-11-05)
+
+The Test Wallet page now connects its encrypted test vault to a background worker that builds a complete verification-only key tree. It shows generation progress, supports cancellation, records a leaf before each signature, independently checks the result and exports a public JSON proof. The tampering control changes a copy of the signed message and shows verification rejection. Chinese / English switching preserves the original signed message and protocol fields. Locking or leaving the page terminates the worker; reopening rebuilds the same tree and continues from its persisted journal.
+
+To try it, create and unlock a **disposable test vault**, choose **Build verification key tree**, enter a non-private test message and select **Sign and verify**. The 1,024-leaf build takes time and runs off the UI thread. Each signature consumes one self-check leaf even if a later step fails. Imported backups remain read-only and cannot sign. No additional package, paid service or server-side key storage is used.
+
+The self-check uses separate key and message domains from account transactions. Its public root is not an account address, and its proof is not evidence of account ownership or a transfer authorization. The flow makes no RPC calls and cannot deploy or broadcast a transaction. Browser-profile rollback, simultaneous devices and loss of trusted current state remain unresolved custody boundaries. See [the exact key-state design](docs/KEY_STATE.md).
+
+Twelve new tests cover domain separation, context validation, independent proof checks, interrupted writes, worker failures, cancellation races, offline verification and read-only recovery. One test runs the actual worker module, generates all 1,024 leaves and checks a real proof. Browser checks also exercise the real worker and IndexedDB together. The cryptographic parameters and Solidity contracts are unchanged.
+
+Verify a downloaded public proof offline, without unlocking a vault:
+
+```sh
+node scripts/verify-local-proof.mjs /path/to/aurven-public-proof-1.json
+```
+
+The verifier rejects malformed, oversized or modified files and exits unsuccessfully when verification fails. Public proofs include their messages; generated exports are excluded from Git.
+
+## Previous milestone: encrypted test vault and leaf journal (2026-11-05)
 
 Test Wallet now includes a browser-local vault: generate fresh test keys, unlock with a password, lock manually, auto-lock when leaving/backgrounding the page or after two idle minutes, export an encrypted backup and import a backup into read-only recovery mode. The interface is available in Chinese and English and keeps the existing black/gold design. It requires HTTPS or loopback, Web Crypto, Web Locks and IndexedDB strict write transactions; unsupported storage fails closed. No additional dependency, server database or paid service is required.
 
@@ -106,6 +124,7 @@ The review covers network configuration, signing and verification paths, account
 | ui/test-wallet-core.js, scripts/local-demo.mjs | Disposable test keys, pre-signing journals and the local account flow. |
 | ui/vault-crypto.js, ui/vault-store.js, ui/vault-service.js | Encrypted browser test vault, strict IndexedDB writes, cross-tab locking and append-only leaf reservations. |
 | ui/vault-ui.js, docs/KEY_STATE.md | Vault controls, auto-locking, read-only backup import and documented recovery limitations. |
+| ui/local-proof.js, ui/proof-engine.js, ui/proof-worker.js, ui/proof-worker-client.js | Verification-only message domains, background tree generation, worker lifecycle and public proof verification. |
 | test/ | Contract regression checks, signature-vector interoperability, client state and receipt checks. Integration between multisig and BscTestAccount still needs acceptance testing. |
 
 ## BSC architecture and risks

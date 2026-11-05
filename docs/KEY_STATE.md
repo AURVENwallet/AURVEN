@@ -1,6 +1,6 @@
 # Key trees, reservations and recovery
 
-This describes the current experimental implementation, not an audited security guarantee. Browser signing and independent recovery authorization are not implemented. Use only disposable local/testnet keys.
+This describes the current experimental implementation, not an audited security guarantee. The browser can sign verification-only messages using a separate self-check tree. Transaction signing and independent recovery authorization are not implemented. Use only disposable local/testnet keys.
 
 ## Tree structure
 
@@ -19,7 +19,19 @@ The implementation uses SHA-256 derivation and truncated Keccak operations. Thes
 5. Append the reservation and commit it with an IndexedDB read/write transaction requesting strict durability. Compare-and-swap rejects an unexpected record change.
 6. Only after transaction completion may the signing caller produce or return a proof.
 
-`TestSigningSession` and the new vault reservation callback are exercised together with a real disposable proof in tests. The website does not yet connect its encrypted seed to that signer. The browser panel only creates, unlocks, locks, exports and imports test vaults. A caller must derive the tree and reservation context from the same validated key; the journal cannot authenticate arbitrary caller-supplied trees by itself.
+`TestSigningSession` and the vault reservation callback are exercised together with a real disposable proof in tests. The website now also connects encrypted test seeds to a verification-only worker through `signProofMessage`; see the separate self-check domain below. It does not authorize account transactions. A transaction-signing caller must derive its tree and reservation context from the same validated key; the generic journal alone cannot authenticate arbitrary caller-supplied trees.
+
+## Browser signature self-check
+
+The wallet page generates a full 1,024-leaf verification tree in a same-origin module worker. It clones the encrypted envelope and non-extractable unlock key to that worker, which authenticates the envelope and derives dedicated keys under `aurven/test-wallet/verification/sk/v1` and `aurven/test-wallet/verification/pub/v1`, including network and wallet identity. These domains differ from both identity and transaction tree derivation. The public root and seed are returned; private signing material is not returned to the UI. A worker keeps computation off the page thread; it is not a security boundary against malicious same-origin scripts or a compromised browser.
+
+Messages are bounded to 280 Unicode characters and hashed under `aurven/local-proof/message/v1`, binding the chain, wallet ID, public seed, root, leaf and fresh challenge. The worker recomputes this digest and rejects a context that does not match its authenticated tree; it has no raw-digest or transaction-signing command. The main service independently verifies both the returned context and proof before exposing a result.
+
+The self-check API takes the next index from the latest authenticated journal while holding the exclusive write lock. It records that reservation with a strict compare-and-swap transaction **before sending the worker a sign command**. Its journal rows use the zero address and epoch zero as verification-only markers, never as a deployed account. The dedicated verification tree has 1,024 self-check leaves; the 960/64 transaction/rotation split applies to account transaction trees, not this separate tree. The vault-wide 1,024-entry cap still applies.
+
+Canceling generation or locking the vault terminates its worker and rejects pending requests. Canceling before a delayed storage read completes cannot launch a late worker. A failure after reservation leaves that index consumed. Reloading requires rebuilding the same verification tree and reads the durable journal to continue at a later leaf. A worker also rejects repeated leaves in memory. Read-only imports cannot build or use a signing worker.
+
+The exported `aurven-local-proof-v1` JSON includes the message, public identity, challenge, leaf, digest and 448-byte proof. It contains no private seed and can be checked with `verifyLocalProof` in `ui/local-proof.js`. Messages should contain no private information if a proof will be shared. This self-consistent proof does not establish an account's ownership or authorization, and no RPC call, account deployment, calldata construction or transaction broadcast is part of this flow.
 
 Once a reservation is committed, cancellation, a locked tab, failed signing, a reverted transaction, RPC timeout or missing receipt must not reclaim the leaf. It is acceptable to waste a leaf. It is not acceptable to sign another digest with it. The existing contract can accept a later unused leaf; the future signing UI must reconcile the authenticated local journal with chain state before choosing one.
 
@@ -56,4 +68,4 @@ Node tests exercise encryption, tampering, import bounds, lock deadlines, concur
 
 To run browser checks, copy `test/browser/vault-checks.html` and `test/browser/vault-checks.js` into ignored `ui/demo/`, serve only `ui/` over loopback, then open `/demo/vault-checks.html` and click **Run storage checks**. The harness uses unique disposable database names and never opens the primary wallet database. Remove only these two copied files when done; retain any unrelated local demo files.
 
-Remaining gates before browser signing include worker-isolated tree generation, validated key/context binding, pending-transaction reconciliation, historical-root rejection, defined power-loss and device-handover behavior, independent recovery design, public-testnet gas validation and specialist cryptographic/security review.
+The self-check has worker-based generation and validated message/key context. Remaining gates before browser transaction signing include account-bound identity/active trees, on-chain state validation, pending-transaction reconciliation, historical-root rejection, defined power-loss and device-handover behavior, independent recovery design, public-testnet gas validation and specialist cryptographic/security review.
