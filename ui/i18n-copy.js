@@ -2,6 +2,13 @@
 export const english = Object.freeze({
   '跳到主要内容':'Skip to main content', 'AURVEN 首页':'AURVEN home', '主导航':'Main navigation',
   '项目介绍':'Overview', '资金流动':'Fund Flow', '验证实验室':'Proof Lab', '测试钱包':'Test Wallet',
+  '在 GitHub 查看源码（新窗口）':'View source on GitHub (new window)',
+  '项目代币':'Project token', '查看合约地址，前往 Four.meme。':'View the contract address and open Four.meme.',
+  '购买代币':'Buy token', '复制代币合约地址':'Copy token contract address', '复制 CA':'Copy CA',
+  '完整合约地址 · 请核对后访问代币页面':'Full contract address · Verify it before opening the token page',
+  'Four.meme · 外部页面 ↗':'Four.meme · External page ↗', '合约地址已复制':'Contract address copied',
+  '无法自动复制，请选中上方完整地址手动复制。':'Unable to copy automatically. Select the full address above to copy it manually.',
+  '项目链接与代币合约':'Project links and token contract',
   '测试原型':'TEST PROTOTYPE', '交互演示':'INTERACTIVE DEMO', '选择语言':'Select language',
   'AURVEN · 面向 BSC 的实验性哈希签名智能账户。项目介绍。':'AURVEN — experimental hash-signature smart accounts for BSC. Project overview.',
   'AURVEN · 面向 BSC 的实验性哈希签名智能账户。资金流动。':'AURVEN — explore how authorization, funds and receipts move through a BSC smart account.',
