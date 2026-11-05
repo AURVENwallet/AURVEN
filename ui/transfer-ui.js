@@ -12,6 +12,17 @@ let confirmedAccount;
 let verifiedDemo;
 let demoLoading=false;
 
+// A public host has no access to the visitor's locally generated demo record.
+// Keep the complete signed-demo flow on the visitor's own loopback preview.
+if (!['localhost','127.0.0.1','[::1]'].includes(location.hostname)) {
+  get('loadDemo').hidden=true;
+  const guide=document.createElement('a');
+  guide.href='https://github.com/AURVENwallet/AURVEN#quick-start--快速开始';
+  guide.className='button run';guide.textContent='本地运行指南 ↗';
+  get('loadDemo').after(guide);
+  get('demoStatus').textContent='完整签名演示需在自己的电脑运行。请按指南启动本地网页和 Anvil；下方仍可准备离线草稿或读取 BSC 测试账户。';
+}
+
 function invalidate() {
   version += 1;
   controller?.abort();

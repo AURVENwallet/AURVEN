@@ -81,6 +81,8 @@ export const english = Object.freeze({
   '让钱包，真正跑起来。':'See the wallet in action.',
   '载入已在本地测试链完成创建、换根与转账的演示账户，查看当前余额与真实交易回执。':'Load a demo account that has completed creation, key rotation and transfers on a local test chain. Inspect its balance and actual transaction receipts.',
   '载入本地演示账户':'Load local demo',
+  '本地运行指南 ↗':'Local setup guide ↗',
+  '完整签名演示需在自己的电脑运行。请按指南启动本地网页和 Anvil；下方仍可准备离线草稿或读取 BSC 测试账户。':'Run the full signing demo on your own computer. Follow the guide to start the local website and Anvil. You can still prepare offline drafts or read BSC test accounts below.',
   '仅本机 Anvil · 使用公开的一次性测试密钥和本地测试币。网页读取已有记录，不代你签名或发送交易。':'Local Anvil only · Uses public, disposable test keys and local test coins. This page reads existing records; it does not sign or send transactions.',
   '本地体验已准备好，点击载入后核对当前状态。':'Load the local demo to check its current state.',
   '账户余额':'Account balance', '本地测试币':'local test coins', '当前密钥代数':'Key epoch', '剩余交易叶':'Available leaves',
