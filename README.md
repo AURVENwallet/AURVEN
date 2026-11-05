@@ -41,7 +41,25 @@ The demo creates fresh disposable keys and a new account on your own machine. Op
 
 The sections below document successive implementation stages. Test counts and pending work in a stage describe that stage; see [SECURITY.md](SECURITY.md) for the release-check summary and known limitations.
 
-## Latest milestone: persistent read-only activity (2026-11-05)
+## Latest milestone: account key-root comparison (2026-11-05)
+
+Test Wallet now checks whether its unlocked test vault can reconstruct an existing account's key root. Enter a test account and RPC in **Does this key match this account?**, or sync an account below and choose **Check key match**. The vault determines the network. The checker verifies the deployed account version, rebuilds all 1,024 leaves in a separate worker and reads the account again afterward. A changed epoch, public seed, root or next-leaf counter invalidates the check. Matching and non-matching roots are shown explicitly, with the checked block and time.
+
+This is a local comparison against an RPC snapshot, not a transferable ownership proof or transaction authorization. It does not generate signatures, reserve leaves, persist a trusted account binding or enable browser transaction signing. Results are cleared when inputs change, the operation is canceled or the vault locks. The worker has no signing command and is terminated after the check. Read-only restored backups may compare roots but remain unable to sign; a match says nothing about the freshness of their usage journal. The existing single-RPC trust and browser-custody limitations still apply.
+
+Fourteen new Node tests cover identity/active derivation, strict context checks, matching and mismatching roots, changed account state, cancellation, concurrent requests, locked sessions, read-only recovery and worker output boundaries. One executes the actual full-tree worker. Browser acceptance matched a freshly deployed local Anvil account with its encrypted test backup, retained the used-leaf count and read-only restrictions, and checked cancellation and locked-result clearing. No contract or cryptographic parameter changed.
+
+To reproduce the positive local case, start Anvil as below, compile the contracts and run:
+
+```sh
+node scripts/local-key-check-fixture.mjs
+```
+
+This creates fresh disposable keys and deploys/bootstrap-configures an account only on loopback Anvil chain 31337. It prints the encrypted fixture path, public fixture password and account address. Import that file into an empty disposable browser storage origin, then run the root comparison. Generated files stay in ignored `demo-runs/`; they are not published. The fixture never takes a user's existing seed or private key.
+
+The English textarea placeholder bug is also fixed: hints and accessibility labels now translate while input values, initial message text and signed content stay unchanged. A three-check browser harness covers the initial placeholder, dynamic updates and Chinese/English round trips. For that harness, copy `test/browser/i18n-checks.html` and `test/browser/i18n-checks.js` into ignored `ui/demo/` and open `/demo/i18n-checks.html` on the loopback preview.
+
+## Previous milestone: persistent read-only activity (2026-11-05)
 
 Test Wallet now saves verified test-account associations and transaction hashes in a separate browser-local database. Sync an account, choose **Save to local tracker**, and add a hash. The local demo can add all six existing transactions at once. **Check all transactions** reads fresh observations; reloading only shows saved results and does not automatically contact an RPC. **Use in transaction draft** fills the account details and requires a fresh state sync before creating a chain-based draft.
 

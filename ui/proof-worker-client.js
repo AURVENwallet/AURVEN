@@ -1,9 +1,9 @@
 import {VaultError,fail} from './vault-crypto.js';
 export class ProofWorkerClient {
   #worker;#next=0;#pending=new Map();
-  constructor(){
+  constructor(url=new URL('./proof-worker.js',import.meta.url)){
     if(typeof Worker!=='function')fail('UNSUPPORTED');
-    try{this.#worker=new Worker(new URL('./proof-worker.js',import.meta.url),{type:'module'});}catch{fail('WORKER');}
+    try{this.#worker=new Worker(url,{type:'module'});}catch{fail('WORKER');}
     this.#worker.onmessage=({data})=>{
       const pending=this.#pending.get(data?.id);if(!pending)return;
       if(typeof data.progress==='number'){

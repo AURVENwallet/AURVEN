@@ -26,7 +26,7 @@ if (!['localhost','127.0.0.1','[::1]'].includes(location.hostname)) {
 }
 
 function invalidate() {
-  trackingState=undefined;get('trackAccount').disabled=true;
+  trackingState=undefined;get('trackAccount').disabled=true;get('checkAccountKeys').disabled=true;
   version += 1;
   controller?.abort();
   if(demoLoading){demoLoading=false;get('demoStatus').textContent='载入已取消，可重新载入演示账户。';}
@@ -72,7 +72,7 @@ function formatBalance(wei) {
 }
 
 function showAccount(state) {
-  trackingState=state;get('trackAccount').disabled=false;
+  trackingState=state;get('trackAccount').disabled=false;get('checkAccountKeys').disabled=false;
   field('epoch').value=state.epoch;field('leaf').value=state.next;
   confirmedAccount={account:state.account,chainId:state.chainId,endpoint:field('rpc').value.trim()};
   get('copyAccount').disabled=false;
@@ -185,6 +185,11 @@ get('trackAccount').onclick=async()=>{
   if(!trackingState)return;
   try{await trackAccount(trackingState,field('rpc').value.trim());}
   catch{get('accountStatus').textContent='本地记录存储不可用或已达到上限。';}
+};
+get('checkAccountKeys').onclick=()=>{
+  if(!trackingState)return;
+  document.dispatchEvent(new CustomEvent('aurven:check-account-keys',{detail:{account:trackingState.account,
+    chainId:trackingState.chainId,endpoint:field('rpc').value.trim()}}));
 };
 document.addEventListener('aurven:watch-account',event=>{
   invalidate();confirmedAccount=undefined;verifiedDemo=undefined;

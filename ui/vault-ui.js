@@ -4,7 +4,7 @@ import {MAX_BACKUP_BYTES} from './vault-crypto.js';
 import {verifyLocalProof} from './local-proof.js';
 const el=id=>document.getElementById(id);
 const status=el('vaultStatus');
-let vault,busy=false,details,building=false,signing=false,lastProof;
+let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
   PASSWORD:'密码至少需要 12 个字符，请使用独立的长密码。',
   PASSWORD_MATCH:'两次输入的密码不一致。',
@@ -29,7 +29,9 @@ const errors={
   PROOF_VERIFY:'签名自检未通过，该叶号仍保持已使用。',
   CANCELED:'操作已取消。已保存的叶号不会被重新使用。',
   WORKER:'后台计算不可用。请使用支持模块 Worker 的浏览器。',
-  WORKER_TIMEOUT:'后台计算超时，操作已停止。'
+  WORKER_TIMEOUT:'后台计算超时，操作已停止。',
+  KEY_CONTEXT:'账户核验上下文不匹配，未保留核验结果。',
+  ACCOUNT_CHANGED:'核验期间账户状态发生变化，请重新核验。'
 };
 const grid=el('proofLeafGrid');
 for(let index=0;index<64;index++){const tile=document.createElement('i');grid.append(tile);}
@@ -65,7 +67,49 @@ function render(){
   el('vaultExport').disabled=busy||!unlocked;
   el('vaultLock').disabled=!unlocked;
   renderProof();
+  renderAccountCheck();
 }
+function renderAccountCheck(){
+  const result=vault?.accountCheck;
+  el('accountKeyFields').disabled=busy||!vault?.unlocked;
+  el('accountKeyCancel').hidden=!checkingKeys;
+  el('accountKeyNetwork').textContent=details?.chainId===97?'BSC Testnet · 97':details?.chainId===31337?'Anvil · 31337':'—';
+  el('accountKeyResult').hidden=!result;
+  if(!result)return;
+  el('accountKeyOutcome').textContent=result.matched?'密钥根匹配':'密钥根不匹配';
+  el('accountKeyOutcome').dataset.match=String(result.matched);
+  el('accountKeyDerived').textContent=result.derivedRoot;el('accountKeyOnchain').textContent=result.snapshot.root;
+  el('accountKeyEpoch').textContent=String(result.snapshot.epoch);el('accountKeyNext').textContent=String(result.snapshot.next);
+  el('accountKeyBlock').textContent=BigInt(result.snapshot.blockNumber).toString();
+  el('accountKeyTime').textContent=new Date(result.checkedAt).toLocaleString();
+  el('accountKeyRecovery').hidden=result.mode!=='recovery-readonly';
+}
+function clearAccountCheck(){vault?.cancelAccountCheck();renderAccountCheck();}
+el('accountKeyForm').addEventListener('input',()=>{
+  clearAccountCheck();el('accountKeyStatus').textContent='信息已修改，请重新核验。';
+});
+document.addEventListener('aurven:check-account-keys',event=>{
+  if(checkingKeys)vault?.cancelAccountCheck();else clearAccountCheck();
+  el('accountKeyAddress').value=event.detail.account;el('accountKeyRpc').value=event.detail.endpoint;
+  el('accountKeyStatus').textContent=details&&details.chainId!==event.detail.chainId?
+    '所选账户网络与密钥库不同，请使用对应网络的测试密钥库。':'账户信息已填入。解锁对应密钥库后开始核验。';
+  location.hash='accountBinding';
+});
+el('accountKeyForm').addEventListener('submit',async event=>{
+  event.preventDefault();if(busy||!vault?.unlocked)return;
+  busy=true;checkingKeys=true;vault.cancelAccountCheck();
+  el('accountKeyProgressBox').hidden=false;el('accountKeyProgress').value=0;el('accountKeyPercent').textContent='0%';
+  el('accountKeyStatus').textContent='读取账户并重建对应密钥树，完成后会再次核对链上状态。';render();
+  try{
+    const result=await vault.checkAccountKeys({account:el('accountKeyAddress').value,endpoint:el('accountKeyRpc').value.trim()},value=>{
+      el('accountKeyProgress').value=Math.round(value*1024);el('accountKeyPercent').textContent=Math.round(value*100)+'%';
+    });
+    el('accountKeyStatus').textContent=result.matched?'密钥根与核验区块中的账户状态一致。此结果不启用交易签名。':
+      '当前密钥库未能重建该账户的密钥根。请检查账户、网络和密钥库。';
+  }catch(error){el('accountKeyStatus').textContent=errors[error.code]??'核验未完成，请检查账户地址、RPC 网络和连接后重试。';}
+  finally{checkingKeys=false;busy=false;el('accountKeyProgressBox').hidden=true;render();}
+});
+el('accountKeyCancel').addEventListener('click',()=>vault?.cancelAccountCheck());
 async function run(action){
   if(busy||!vault)return;
   busy=true;render();status.textContent='正在处理本地加密数据…';
@@ -157,6 +201,8 @@ window.addEventListener('pageshow',()=>{vault?.lock('navigation');render();});
 try{
   if(!isSecureContext||!crypto.subtle||!navigator.locks)throw {code:'UNSUPPORTED'};
   vault=new TestVault(await openVaultStore(),{onLock:reason=>{
+    el('accountKeyProgressBox').hidden=true;
+    el('accountKeyStatus').textContent='密钥库已锁定，核验结果已清除。';
     lastProof=undefined;el('proofBuildProgress').hidden=true;
     el('proofStatus').textContent='密钥库已锁定。后台计算已终止，重新解锁后需再次生成验证树。';
     status.textContent=reason==='manual'?'密钥库已锁定。':'密钥库已自动锁定，请重新输入密码。';render();

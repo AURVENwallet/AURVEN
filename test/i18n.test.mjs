@@ -7,7 +7,7 @@ test('all five pages expose language controls and English static copy',()=>{
   for(const name of ['index','flow','lab','wallet','token']){
     const html=readFileSync(new URL('../ui/'+name+'.html',import.meta.url),'utf8');
     assert.match(html,/data-language="zh-CN"/);assert.match(html,/data-language="en"/);
-    assert.match(html,/src="\.\/i18n.js\?v=1"/);
+    assert.match(html,/src="\.\/i18n.js\?v=2"/);
     const markup=html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'')
       .replace(/<div class="language-switch"[^>]*>[\s\S]*?<\/div>/g,'');
     const fields=[...markup.matchAll(/>([^<>]+)</g)].map(m=>m[1]);

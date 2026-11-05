@@ -5,7 +5,8 @@ let language='zh-CN';
 try { language=normalizeLanguage(localStorage.getItem(storageKey)); } catch { /* Storage is optional. */ }
 const originals=new WeakMap();
 const attributes=['aria-label','aria-valuetext','title','placeholder','alt'];
-const excluded='script,style,code,pre,textarea,[data-i18n-ignore]';
+const excludedElements='script,style,code,pre,[data-i18n-ignore]';
+const excludedText=excludedElements+',textarea';
 
 // Keep the source and last rendered value per DOM field. When application code
 // updates a live status, it becomes the new source, so switching never restores
@@ -21,16 +22,18 @@ function renderValue(node,key,current,write){
 }
 function translateNode(node){
   if(node.nodeType===Node.TEXT_NODE){
-    if(!node.parentElement || node.parentElement.closest(excluded))return;
+    if(!node.parentElement || node.parentElement.closest(excludedText))return;
     renderValue(node,'text',node.data,value=>{node.data=value;});return;
   }
   if(node.nodeType!==Node.ELEMENT_NODE && node.nodeType!==Node.DOCUMENT_NODE)return;
   if(node.nodeType===Node.ELEMENT_NODE){
-    if(node.matches(excluded) || node.closest('[data-i18n-ignore]'))return;
+    if(node.closest(excludedElements))return;
     for(const name of attributes){
       if(node.hasAttribute(name))renderValue(node,name,node.getAttribute(name),value=>node.setAttribute(name,value));
     }
     if(node.matches('meta[name="description"]'))renderValue(node,'content',node.content,value=>{node.content=value;});
+    // Translate textarea labels and hints, never its initial text or user value.
+    if(node.matches('textarea'))return;
   }
   for(const child of node.childNodes)translateNode(child);
 }
@@ -50,7 +53,7 @@ const observer=new MutationObserver(records=>{
     if(record.type==='childList')record.addedNodes.forEach(translateNode);
     else if(record.type==='attributes'){
       const node=record.target,name=record.attributeName;
-      if(!node.closest(excluded) && node.hasAttribute(name))renderValue(node,name,node.getAttribute(name),value=>node.setAttribute(name,value));
+      if(!node.closest(excludedElements) && node.hasAttribute(name))renderValue(node,name,node.getAttribute(name),value=>node.setAttribute(name,value));
     }else translateNode(record.target);
   }
 });

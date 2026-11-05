@@ -3,13 +3,18 @@ import {VaultError,fail,createEnvelope,validateEnvelope,parseBackup,deriveVaultK
 import {hex} from './vault-crypto.js';
 import {ProofWorkerClient} from './proof-worker-client.js';
 import {LOCAL_PROOF_FORMAT,PROOF_ACCOUNT,validateProofMessage,proofDigest,verifyLocalProof,proofTreeState} from './local-proof.js';
+import {readAccount} from './account-state.js';
+import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
 
 export class TestVault {
   #key;#walletId;#revision=0;#generation=0;#timer;#deadline=0;#details=null;#observed=new Map();
   #proofWorker;#proofTree;#proofGeneration=0;
-  constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient()}={}){
+  #bindingWorker;#bindingAbort;#bindingGeneration=0;#bindingResult;
+  constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
+    bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount}={}){
     if(!locks?.request||!Number.isFinite(idleMs)||idleMs<=0)fail('UNSUPPORTED');
     this.store=store;this.locks=locks;this.now=now;this.idleMs=idleMs;this.onLock=onLock;this.workerFactory=workerFactory;
+    this.bindingWorkerFactory=bindingWorkerFactory;this.accountReader=accountReader;
   }
   get unlocked(){if(this.#key&&this.now()>=this.#deadline)this.lock('idle');return !!this.#key;}
   get details(){return this.#details?{...this.#details,unlocked:this.unlocked}:null;}
@@ -22,6 +27,7 @@ export class TestVault {
   lock(reason='manual'){
     const hadKey=!!this.#key;this.#generation++;this.#key=undefined;this.#walletId=undefined;
     this.cancelProof();
+    this.cancelAccountCheck();
     clearTimeout(this.#timer);if(hadKey)this.onLock(reason);
   }
   #capture(){if(!this.unlocked)fail('LOCKED');return {key:this.#key,generation:this.#generation,id:this.#walletId};}
@@ -177,5 +183,44 @@ export class TestVault {
         throw error;
       }
     });
+  }
+  get accountCheck(){return this.unlocked&&this.#bindingResult?structuredClone(this.#bindingResult):null;}
+  cancelAccountCheck(){
+    this.#bindingGeneration++;this.#bindingAbort?.abort();this.#bindingAbort=undefined;
+    this.#bindingWorker?.dispose();this.#bindingWorker=undefined;this.#bindingResult=undefined;
+  }
+  async checkAccountKeys({endpoint,account},progress){
+    const context=this.#capture();
+    if(this.#bindingAbort)fail('BUSY');
+    this.#bindingResult=undefined;
+    account=typeof account==='string'?account.trim().toLowerCase():'';
+    if(!/^0x[0-9a-f]{40}$/.test(account))fail('KEY_CONTEXT');
+    const generation=this.#bindingGeneration,controller=new AbortController();this.#bindingAbort=controller;
+    const stillCurrent=()=>{this.#check(context);if(generation!==this.#bindingGeneration)fail('CANCELED');};
+    let worker;
+    try{
+      const {record}=await this.#load(context);stillCurrent();
+      const read=async()=>validateKeySnapshot(await this.accountReader({endpoint,account,chainId:record.chainId,signal:controller.signal}),record.chainId,account);
+      const before=await read();stillCurrent();
+      worker=this.bindingWorkerFactory();this.#bindingWorker=worker;
+      const derived=validateDerivedRoot(await worker.request('check',{record,key:context.key,snapshot:before},progress),record,before);
+      stillCurrent();
+      const after=await read();stillCurrent();
+      if(!keyStateEqual(before,after))fail('ACCOUNT_CHANGED');
+      const latest=await this.#load(context);stillCurrent();
+      if(latest.record.chainId!==record.chainId||latest.record.mode!==record.mode)fail('KEY_CONTEXT');
+      this.#bindingResult={format:'aurven-account-root-check-v1',walletId:record.walletId,chainId:record.chainId,
+        account,mode:record.mode,matched:derived.pubSeed===after.pubSeed&&derived.root===after.root,
+        purpose:'local-root-comparison-only',derivedPubSeed:derived.pubSeed,derivedRoot:derived.root,
+        snapshot:after,checkedAt:Date.now()};
+      return this.accountCheck;
+    }catch(error){
+      if(generation!==this.#bindingGeneration)fail(this.unlocked?'CANCELED':'LOCKED');
+      if(['AUTH_FAILED','FORMAT','MISSING','ROLLBACK','STORAGE'].includes(error.code))this.lock('storage');
+      throw error;
+    }finally{
+      worker?.dispose();
+      if(generation===this.#bindingGeneration){this.#bindingWorker=undefined;this.#bindingAbort=undefined;}
+    }
   }
 }
