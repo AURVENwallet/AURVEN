@@ -1,0 +1,77 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-gh7NRJ7MEWdYUGMcXx0SUMJY93gUi2UqlztG1amlvwA='; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#090b0d"><meta name="description" content="AURVEN · 面向 BSC 的实验性哈希签名智能账户。验证实验室。"><title>验证实验室 · AURVEN</title><link rel="icon" href="./assets/aurven-mark-web.png" type="image/png"><link rel="stylesheet" href="./v2.css"><script type="importmap">{"imports":{"three":"./vendor/three/three.module.js","three/addons/":"./vendor/three/addons/"}}</script><script type="module" src="./i18n.js?v=1"></script><script type="module" src="./app.js?v=2"></script><link rel="stylesheet" href="./aurven-materials.css?v=4"><script type="module" src="./aurven-materials.js?v=1"></script><link rel="stylesheet" href="./i18n.css?v=1"></head><body class="aurven page-lab"><a class="skip-link" href="#main">跳到主要内容</a><header class="site-header"><a class="brand" href="./index.html" aria-label="AURVEN 首页"><img class="brand-symbol" src="./assets/aurven-mark-web.png" width="48" height="48" alt="" aria-hidden="true"><span>AURVEN</span></a><nav aria-label="主导航"><a href="./index.html">项目介绍</a><a href="./flow.html">资金流动</a><a href="./lab.html" aria-current="page">验证实验室</a><a href="./wallet.html">测试钱包</a></nav><div class="header-actions"><span class="site-badge">测试原型</span><div class="language-switch" role="group" aria-label="选择语言" data-i18n-ignore><button type="button" data-language="zh-CN" lang="zh-CN" aria-pressed="true">中文</button><button type="button" data-language="en" lang="en" aria-pressed="false">EN</button></div></div></header><main id="main" class="content-width tool-page">
+<div class="heading" id="lab">
+<div>
+<label>PROOF / VERIFICATION</label>
+<h1 class="page-title">让每一步验证<span>，</span><br>都有迹可循。
+</h1>
+</div>
+<p>选择公开证明，在本地重建完整的验证路径。</p>
+</div>
+<section class="lab-layout">
+<article class="proof-stage scene-host"><div class="scene-fallback" aria-hidden="true"><div class="fallback-ring"></div><div class="fallback-ring"></div><div class="fallback-ring"></div><div class="fallback-core"></div></div>
+<div class="cap">MERKLE PATH <em>11 NODES / 10 LEVELS</em>
+</div>
+<div class="scene-tools">
+<button id="explode">展开路径</button>
+<button id="view">切换视角</button>
+<button id="reset">复位</button>
+<label>缩放 <input id="zoom" type="range" min="70" max="140" value="100">
+</label>
+</div>
+<canvas id="scene" aria-label="三维 Merkle 验证路径，共 11 个节点，可拖动或点击选择层级">
+</canvas>
+<footer>
+<span>拖动旋转 · 滚轮缩放</span>
+<button id="motion">自动旋转</button>
+</footer>
+</article>
+<aside class="proof-inspector">
+<label>PROOF INSPECTOR</label>
+<h2>签名验证</h2>
+<p>选择测试证明，在浏览器中重建 Merkle 根。</p>
+<label for="mode">证明样本</label>
+<select id="mode">
+<option>原始签名证明</option>
+<option>篡改第一个字节</option>
+</select>
+<div class="row">证明长度<b>448 B</b>
+</div>
+<div class="row">密钥叶索引<b>0000</b>
+</div>
+<div class="row">样本网络<b>Anvil · 31337</b>
+</div>
+<button class="run" id="run">运行验证　↗</button>
+<output id="result" aria-live="polite">等待验证</output>
+</aside>
+</section>
+<section id="trace" hidden>
+<div>
+<label>MERKLE PATH</label>
+<h2>验证路径</h2>
+<p id="levelName">
+</p>
+<div class="trace-tools">
+<button id="play">播放验证路径</button>
+<button id="export">导出验证记录</button>
+</div>
+<div id="nodes" aria-label="验证路径节点">
+</div>
+<input type="range" id="level" aria-label="查看验证层级" min="0" max="10" value="10">
+</div>
+<div class="hashes">
+<label>原始证明</label>
+<code id="original">
+</code>
+<label>所选证明</label>
+<code id="current">
+</code>
+</div>
+</section>
+<div class="bottom">
+<label>MERKLE ROOT</label>
+<code id="expectedRoot">
+</code>
+<span>公开测试向量</span>
+</div>
+
+</main><footer class="site-footer"><a class="brand" href="./index.html"><img class="brand-symbol" src="./assets/aurven-mark-web.png" width="48" height="48" alt="" aria-hidden="true">AURVEN</a><span>面向 BSC 的哈希签名智能账户</span><small>LOCAL / TESTNET PROTOTYPE</small></footer></body></html>

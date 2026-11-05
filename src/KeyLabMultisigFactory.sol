@@ -1,0 +1,31 @@
+pragma solidity 0.8.33;
+
+import {KeyLabMultisig} from "./KeyLabMultisig.sol";
+
+contract KeyLabMultisigFactory {
+    event Created(address indexed vault, address indexed creator, address[] owners, uint8 threshold, bytes32 nonce);
+
+    mapping(address => bool) public isVault;
+
+    function salt(address[] calldata owners, uint8 threshold, bytes32 nonce) public pure returns (bytes32) {
+        return keccak256(abi.encode("keylab/evm/multisig/v1", owners, threshold, nonce));
+    }
+
+    function predict(address[] calldata owners, uint8 threshold, bytes32 nonce)
+        public
+        view
+        returns (address)
+    {
+        bytes32 code = keccak256(abi.encodePacked(type(KeyLabMultisig).creationCode, abi.encode(owners, threshold)));
+        return address(
+            uint160(uint256(keccak256(abi.encodePacked(bytes1(0xff), address(this), salt(owners, threshold, nonce), code))))
+        );
+    }
+
+    function create(address[] calldata owners, uint8 threshold, bytes32 nonce) external returns (address vault) {
+        vault = address(new KeyLabMultisig{salt: salt(owners, threshold, nonce)}(owners, threshold));
+        isVault[vault] = true;
+        emit Created(vault, msg.sender, owners, threshold, nonce);
+    }
+}
+

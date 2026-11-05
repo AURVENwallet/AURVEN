@@ -1,0 +1,24 @@
+# Local chain runs contain disposable signing material and must stay local.
+/demo-runs/
+/ui/demo/
+/out/
+/cache/
+/broadcast/
+/node_modules/
+/coverage/
+*.log
+*.tmp
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.wallet
+*TEST-KEYS*.json
+reservations.jsonl
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

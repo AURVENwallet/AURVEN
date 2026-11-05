@@ -1,0 +1,194 @@
+/* AURVEN: folded gold, dark inner faces and a fine illuminated edge. */
+.aurven {
+  --metal-gold: linear-gradient(112deg, #ffedaa -8%, #ffda51 16%, #ffc515 40%, #efab0b 62%, #bf8017 80%, #ecb931 100%);
+  --metal-dark: linear-gradient(125deg, #3c3b32 0%, #1c1e20 28%, #0c0e10 63%, #25251f 100%);
+  --metal-edge: #a18448;
+  --metal-shadow: 0 3px 0 #08090a, 0 7px 16px #0006, inset 0 1px 0 #ffedbd35, inset 0 -1px 0 #0009;
+  --gold-shadow: 0 3px 0 #6d460e, 0 7px 20px #0007, inset 0 1px 0 #fff6d2, inset 0 -1px 0 #a5661880;
+  --fold-radius: 10px 4px 10px 4px;
+}
+
+/* Public branding uses the selected artwork without an embedded wordmark. */
+.aurven .brand {gap:12px;letter-spacing:.14em}
+.aurven .brand-symbol {
+  width:48px;height:48px;clip-path:none;display:block;object-fit:contain;
+  background:none;mix-blend-mode:normal;
+}
+.aurven .site-footer .brand-symbol {width:30px;height:30px}
+.aurven .site-badge {
+  color:#f3d18b;border:1px solid #92723c;border-radius:6px 2px 6px 2px;
+  background:linear-gradient(120deg,#343026,#121416 60%,#24221b);
+  box-shadow:inset 0 1px 0 #ffdc8e25;
+}
+
+/* Every control has the same surface; layout and native semantics stay intact. */
+.aurven button,.aurven a.button {
+  --light-x:32%;--light-y:0%;
+  border:1px solid var(--metal-edge);border-top-color:#c1a979;border-bottom-color:#655231;
+  border-radius:var(--fold-radius);color:#f4ead5;
+  background-color:#141618;
+  background-image:radial-gradient(ellipse at var(--light-x) var(--light-y),#ffe6ac18,transparent 67%),var(--metal-dark);
+  box-shadow:var(--metal-shadow);
+  text-shadow:0 1px 1px #0008;
+  transition:box-shadow .18s ease,border-color .18s ease,translate .18s ease,filter .18s ease;
+}
+.aurven button:not(.object-label),.aurven a.button {position:relative}
+.aurven button:hover:not(:disabled),.aurven a.button:hover {
+  color:#fff5df;border-color:#e0b868;
+  background-image:radial-gradient(ellipse at var(--light-x) var(--light-y),#ffe6ac35,transparent 67%),var(--metal-dark);
+  box-shadow:0 3px 0 #08090a,0 8px 24px #0008,inset 0 1px 0 #ffe5ab60,0 0 0 1px #e0b86812;
+  translate:0 -1px;
+}
+.aurven button:active:not(:disabled),.aurven a.button:active {
+  translate:0 2px;
+  box-shadow:0 1px 0 #08090a,inset 0 2px 5px #0008;
+}
+.aurven button:disabled {
+  opacity:.42;cursor:not-allowed;filter:saturate(.18);translate:none;
+  border-color:#605b4e;box-shadow:inset 0 1px 0 #ffffff12;
+}
+.aurven :is(button,a,input,select,summary,canvas):focus-visible {
+  outline:2px solid #fff0b8;outline-offset:4px;
+}
+
+/* Gold faces: primary actions and selected toggles. Dark text never crosses a black fold. */
+.aurven a.primary,.aurven .run,.aurven .play-button,.aurven button[aria-pressed=true] {
+  color:#211705;border-color:#f5cf6a;border-top-color:#fff1bc;border-bottom-color:#9b691f;
+  background-color:#f0b90b;
+  background-image:radial-gradient(ellipse at var(--light-x) var(--light-y),#fff9dc77,transparent 58%),var(--metal-gold);
+  box-shadow:var(--gold-shadow);text-shadow:0 1px 0 #fff8cf55;font-weight:650;
+}
+.aurven :is(.primary,.run,.play-button,button[aria-pressed=true]):hover:not(:disabled) {
+  color:#211705;border-color:#fff0b0;
+  background-image:radial-gradient(ellipse at var(--light-x) var(--light-y),#fff9dca6,transparent 58%),var(--metal-gold);
+  box-shadow:0 4px 0 #6d460e,0 10px 25px #0008,inset 0 1px 0 #fff8d8,0 0 15px #f0b90b10;
+}
+.aurven :is(.primary,.run,.play-button,button[aria-pressed=true]):active:not(:disabled) {
+  box-shadow:0 1px 0 #6d460e,inset 0 2px 5px #73490060;
+}
+.aurven .primary,.aurven .run {overflow:hidden;padding-right:28px}
+.aurven .primary::after,.aurven .run::after {
+  content:'';position:absolute;right:0;top:0;bottom:0;width:13px;pointer-events:none;
+  background:linear-gradient(100deg,#79501500,#6a430070 60%,#fff0af50);
+  border-left:1px solid #fff3bc35;transform:skewX(-13deg);transform-origin:bottom;
+}
+.aurven .button span {transition:translate .2s ease}
+.aurven .button:hover span {translate:2px -1px}
+
+/* The navigation has a black metal face with a gold seam on the current page. */
+.aurven .site-header nav {gap:10px}
+.aurven .site-header nav a {
+  margin-block:18px;padding:8px 14px;border:1px solid transparent;border-radius:8px 3px 8px 3px;
+  transition:background .18s,border-color .18s,color .18s;
+}
+.aurven .site-header nav a:hover,.aurven .site-header nav a[aria-current] {
+  color:#ffe4a0;border-color:#9b793f;background:var(--metal-dark);
+  box-shadow:inset 0 1px 0 #ffe3a742,0 3px 0 #0006;
+}
+.aurven .site-header nav a[aria-current]::after {
+  left:13px;right:13px;bottom:-1px;height:2px;background:var(--metal-gold);
+  box-shadow:0 0 7px #f0b90b33;
+}
+.aurven .text-link {border-bottom:1px solid #9f793550;transition:border-color .18s,color .18s}
+.aurven .text-link:hover {color:#ffe19a;border-bottom-color:#e6bc65}
+
+/* Compact metal switches and a machined, concentric transport key. */
+.aurven .hero-scene-tools,.aurven .scene-tools,.aurven .view-tools {gap:9px}
+.aurven .hero-scene-tools button {min-height:40px}
+.aurven .view-tools button {width:38px;min-height:38px;border-radius:9px 3px 9px 3px}
+.aurven .scene-tools button {min-height:36px}
+.aurven .play-button {
+  width:60px;height:60px;border-radius:50%;
+  background-image:radial-gradient(ellipse at var(--light-x) var(--light-y),#fffbe399,transparent 60%),conic-gradient(from 210deg,#9a6509,#ffe69a 16%,#ffc721 38%,#e6a10c 62%,#b67a13 78%,#fbd15c 94%,#9a6509);
+  box-shadow:0 4px 0 #5f3f12,0 9px 20px #0009,inset 0 0 0 3px #ffdf8270,inset 0 0 0 5px #96671550;
+}
+.aurven .play-button:hover:not(:disabled) {
+  background-image:radial-gradient(ellipse at var(--light-x) var(--light-y),#fffbe3bb,transparent 60%),conic-gradient(from 210deg,#9a6509,#ffe69a 16%,#ffc721 38%,#e6a10c 62%,#b67a13 78%,#fbd15c 94%,#9a6509);
+}
+.aurven .flow-steps {gap:9px}
+.aurven .flow-steps button {min-height:36px;padding:7px 10px;gap:7px;justify-content:center}
+.aurven .flow-steps button i {width:9px;height:9px;border:1px solid #baa574;background:#090b0d;box-shadow:inset 0 1px 2px #000}
+.aurven .flow-steps button[aria-pressed=true] i {border:2px solid #5f410f;background:#ffedaa}
+.aurven .flow-steps button[aria-pressed=true] {text-decoration:none}
+.aurven .transport-options button {padding:8px 12px;font-size:11px}
+.aurven .transport-options select {min-width:60px;width:auto;padding:8px 21px 8px 9px;font-size:12px}
+.aurven .object-label {border-radius:6px 2px 6px 2px;padding:5px 11px;font-size:10px}
+.aurven .object-label::after {background:linear-gradient(#e9c272,#a99a7d55)}
+.aurven .object-label[data-related=true]:not([aria-pressed=true]) {border-color:#b49b6b;color:#f3e6cb}
+.aurven #nodes button {min-width:35px;min-height:35px;border-radius:6px 2px 6px 2px}
+
+/* Inset form surfaces and a sculpted gold slider handle. */
+.aurven select,.aurven input:not([type=range]) {
+  color:#efe9db;border:1px solid #6a5b3d;border-top-color:#3d392e;border-bottom-color:#9a7a43;
+  border-radius:8px 3px 8px 3px;
+  background:linear-gradient(110deg,#080a0c,#141719 70%,#1d1d18);
+  box-shadow:inset 0 2px 7px #0007,0 1px 0 #ffe1a515;
+  transition:border-color .18s,box-shadow .18s;
+}
+.aurven select {
+  appearance:none;padding-right:36px;
+  background-image:linear-gradient(45deg,transparent 50%,#e2bd72 50%),linear-gradient(135deg,#e2bd72 50%,transparent 50%),linear-gradient(110deg,#080a0c,#141719 70%,#1d1d18);
+  background-position:calc(100% - 19px) 50%,calc(100% - 14px) 50%,0 0;
+  background-size:5px 5px,5px 5px,100% 100%;background-repeat:no-repeat;
+}
+.aurven select option {background:#131619;color:#f3f0e9}
+.aurven select:hover,.aurven input:not([type=range]):not(:read-only):hover {border-color:#c7a266}
+.aurven select:focus,.aurven input:not([type=range]):focus {border-color:#f2c565;box-shadow:inset 0 2px 7px #0007,0 0 0 2px #f0b90b14}
+.aurven input:not([type=range]):read-only {color:#969993;border-color:#45443a;box-shadow:inset 0 1px 4px #0008}
+.aurven input::placeholder {color:#878980}
+.aurven input[type=range],.aurven #flowProgress {
+  appearance:none;-webkit-appearance:none;height:25px;background:transparent;accent-color:#f0b90b;
+}
+.aurven input[type=range]::-webkit-slider-runnable-track {
+  height:6px;border:1px solid #8c703c;border-top-color:#463a26;border-bottom-color:#b29452;border-radius:4px;
+  background:linear-gradient(#090b0d,#423721);box-shadow:inset 0 1px 3px #0009;
+}
+.aurven input[type=range]::-webkit-slider-thumb {
+  appearance:none;-webkit-appearance:none;width:17px;height:20px;margin-top:-8px;border:1px solid #e6c779;border-radius:5px 2px 5px 2px;
+  background:linear-gradient(105deg,#fff1b6,#ffca21 38%,#bd7d10 72%,#edb83f);
+  box-shadow:0 2px 2px #000a,inset 2px 0 0 #fff1b680,inset -2px 0 0 #8b590866;
+}
+.aurven input[type=range]::-moz-range-track {height:5px;border:1px solid #8c703c;border-radius:4px;background:linear-gradient(#090b0d,#423721)}
+.aurven input[type=range]::-moz-range-thumb {width:15px;height:18px;border:1px solid #e6c779;border-radius:5px 2px 5px 2px;background:var(--metal-gold);box-shadow:0 2px 2px #000a}
+.aurven input[type=range]:focus-visible {outline-offset:2px}
+.aurven input[type=range]:disabled {opacity:.4;cursor:not-allowed}
+
+.aurven .project-faq details {padding:12px 0}
+.aurven .project-faq summary,.aurven .simulation-settings summary {
+  min-height:44px;padding:10px 13px;border:1px solid #7e6739;border-radius:var(--fold-radius);
+  color:#e4d5b5;background:var(--metal-dark);box-shadow:var(--metal-shadow);
+}
+.aurven summary:hover {border-color:#ddb96c;color:#fff1ce}
+.aurven details[open]>summary {color:#ffe19a;border-color:#caa763;box-shadow:inset 0 1px 0 #ffe3a740}
+.aurven .project-faq summary::after {color:#efca79}
+.aurven .simulation-settings {padding-top:15px}
+
+@media(max-width:1100px) {
+  .aurven .site-header nav {gap:5px}.aurven .site-header nav a {padding-inline:11px}
+  .aurven .flow-steps {gap:6px}.aurven .flow-steps button {padding-inline:7px;gap:5px}
+  .aurven .transport-options {gap:8px}
+}
+@media(max-width:760px) {
+  .aurven .site-header .brand {gap:9px;font-size:20px}
+  .aurven .site-header .brand-symbol {width:38px;height:38px}
+  .aurven .site-header nav {gap:7px;height:50px;overflow:visible;margin-top:12px}
+  .aurven .site-header nav a {margin:0 0 7px;justify-content:center;flex:1;padding:8px 5px;font-size:11px}
+  .aurven .site-header nav a[aria-current]::after {left:9px;right:9px}
+  .aurven .hero-scene-tools button,.aurven .view-tools button {min-height:44px;min-width:44px}
+  .aurven .scene-tools {gap:7px}.aurven .scene-tools button {min-height:42px}
+  .aurven .scene-tools label {min-height:38px}
+  .aurven .object-label {min-height:44px;padding-inline:8px;font-size:9px}
+  .aurven .play-button {width:46px;height:46px;font-size:19px}
+  .aurven .flow-steps {gap:5px}.aurven .flow-steps button {min-height:44px;padding:6px 3px;font-size:10px}
+  .aurven .transport {column-gap:13px}.aurven .transport-track {width:calc(100% - 60px)}
+  .aurven .transport-options {gap:13px}.aurven .transport-options button,.aurven .transport-options select {min-height:44px}
+  .aurven .project-faq summary {font-size:13px}
+}
+@media(prefers-reduced-motion:reduce) {
+  .aurven button,.aurven a.button,.aurven .button span {transition:none;translate:none!important}
+}
+@media(forced-colors:active) {
+  .aurven button,.aurven a.button,.aurven select,.aurven input,.aurven summary {background:Canvas;color:CanvasText;border:1px solid ButtonText;box-shadow:none;text-shadow:none}
+  .aurven button[aria-pressed=true],.aurven .primary,.aurven .run {background:Highlight;color:HighlightText}
+  .aurven .primary::after,.aurven .run::after {display:none}
+}

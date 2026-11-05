@@ -1,0 +1,5 @@
+Three.js 0.187.0
+Source: official npm package three@0.187.0
+Vendored modules: three.module.js, three.core.js, OrbitControls, RoundedBoxGeometry, RoomEnvironment.
+License: MIT; see LICENSE in this directory.
+The site serves these files locally and does not load runtime assets from a CDN.

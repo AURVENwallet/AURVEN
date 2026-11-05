@@ -1,0 +1,44 @@
+.header-actions{display:flex;align-items:center;gap:14px;flex-shrink:0}
+.language-switch{display:inline-flex;gap:3px;padding:3px;border:1px solid #a98b4850;border-radius:7px;background:#090b0d;white-space:nowrap}
+.aurven .language-switch button{font:600 11px/1.2 var(--mono);min-width:38px;min-height:34px;padding:7px 9px;border-radius:4px;box-shadow:none}
+.aurven .language-switch button[aria-pressed=false]{border-color:transparent;background:transparent;color:#b0b0aa}
+.aurven .language-switch button:focus-visible{outline:2px solid #ffe390;outline-offset:3px}
+html[lang=en] .hero h1{font-size:clamp(38px,4.9vw,78px);white-space:normal;line-height:1.13;letter-spacing:-.055em}
+html[lang=en] .hero-description{font-size:clamp(14px,1.3vw,19px)}
+html[lang=en] .hero-actions{gap:22px;flex-wrap:wrap;white-space:normal}
+html[lang=en] .hero .eyebrow{white-space:normal}
+html[lang=en] .flow-title h1{font-size:clamp(25px,2.4vw,38px)}
+html[lang=en] .flow-title p:last-child{max-width:430px;line-height:1.6}
+html[lang=en] .inspector-facts div{align-items:start}
+html[lang=en] .inspector-facts dd{white-space:normal;text-align:right;max-width:62%}
+html[lang=en] .flow-inspector h2{font-size:24px}
+html[lang=en] .interaction-hint{white-space:normal}
+html[lang=en] .progress-list b{flex-shrink:0}
+html[lang=en] .page-title{font-size:clamp(33px,4.4vw,64px);line-height:1.15}
+html[lang=en] .key-sequence-bottom{gap:12px;font-size:10px}
+html[lang=en] .journey-rail small{line-height:1.6}
+@media(max-width:1100px){.header-actions .site-badge{display:none}.site-header{gap:14px}}
+@media(max-width:760px){
+  .header-actions{grid-column:2;grid-row:1}.aurven .language-switch button{min-height:38px;min-width:36px;padding-inline:7px}
+  html[lang=en] .site-header nav a{font-size:10px;letter-spacing:0;padding-inline:4px}
+  html[lang=en] .hero h1{font-size:clamp(35px,9vw,58px)}
+  html[lang=en] .hero-description{max-width:90%;font-size:14px}
+  html[lang=en] .hero-visual{margin-top:0}
+  html[lang=en] .scene-instruction{font-size:10px}
+  html[lang=en] .flow-title{right:6vw}
+  html[lang=en] .flow-title h1{font-size:27px;line-height:1.2}
+  html[lang=en] .flow-title p:last-child{max-width:290px}
+  html[lang=en] .flow-legend{gap:8px;font-size:8px;flex-wrap:wrap;right:6vw}
+  html[lang=en] .flow-steps button{font-size:9px;padding-inline:4px}
+  html[lang=en] .flow-inspector .inspector-main{grid-template-columns:1fr}
+  html[lang=en] .inspector-facts{grid-column:1;grid-row:auto;margin-top:14px;padding-block:14px}
+  html[lang=en] .inspector-facts dd{max-width:70%}
+  html[lang=en] .scene-tools{flex-wrap:wrap}
+  html[lang=en] .scene-tools button{font-size:9px;padding-inline:7px}
+  html[lang=en] .page-title{font-size:clamp(29px,8vw,44px)}
+  html[lang=en] .progress-list>a,html[lang=en] .progress-list>div{align-items:start}
+  html[lang=en] .progress-list span{line-height:1.7}
+  html[lang=en] .demo-stats{gap:12px}
+  html[lang=en] .demo-stats span{line-height:1.6;min-height:32px;display:block}
+  html[lang=en] .demo-history summary{font-size:12px}
+}

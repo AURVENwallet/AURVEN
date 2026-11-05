@@ -1,0 +1,74 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' ; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#090b0d"><meta name="description" content="AURVEN · 面向 BSC 的实验性哈希签名智能账户。测试钱包。"><title>测试钱包 · AURVEN</title><link rel="icon" href="./assets/aurven-mark-web.png" type="image/png"><link rel="stylesheet" href="./v2.css"><script type="module" src="./i18n.js?v=1"></script><script type="module" src="./transfer-ui.js?v=4"></script><link rel="stylesheet" href="./aurven-materials.css?v=4"><script type="module" src="./aurven-materials.js?v=1"></script><link rel="stylesheet" href="./wallet-experience.css?v=1"><link rel="stylesheet" href="./i18n.css?v=1"></head><body class="aurven page-wallet"><a class="skip-link" href="#main">跳到主要内容</a><header class="site-header"><a class="brand" href="./index.html" aria-label="AURVEN 首页"><img class="brand-symbol" src="./assets/aurven-mark-web.png" width="48" height="48" alt="" aria-hidden="true"><span>AURVEN</span></a><nav aria-label="主导航"><a href="./index.html">项目介绍</a><a href="./flow.html">资金流动</a><a href="./lab.html">验证实验室</a><a href="./wallet.html" aria-current="page">测试钱包</a></nav><div class="header-actions"><span class="site-badge">测试原型</span><div class="language-switch" role="group" aria-label="选择语言" data-i18n-ignore><button type="button" data-language="zh-CN" lang="zh-CN" aria-pressed="true">中文</button><button type="button" data-language="en" lang="en" aria-pressed="false">EN</button></div></div></header><main id="main" class="content-width tool-page">
+<div class="page-intro">
+<label>TEST WALLET / TRANSACTION</label>
+<h1 class="page-title">每一次授权，<br>先看清楚<span>。</span>
+</h1>
+<p>同步测试账户，核对状态，准备待签名交易。</p>
+</div>
+<section class="wallet-demo" aria-labelledby="demoTitle">
+<div class="demo-heading"><div><p class="eyebrow">LOCAL WALLET / LIVE RECEIPTS</p><h2 id="demoTitle">让钱包，真正跑起来。</h2><p>载入已在本地测试链完成创建、换根与转账的演示账户，查看当前余额与真实交易回执。</p></div><button id="loadDemo" class="button run">载入本地演示账户 <span>↗</span></button></div>
+<p class="demo-notice">仅本机 Anvil · 使用公开的一次性测试密钥和本地测试币。网页读取已有记录，不代你签名或发送交易。</p>
+<output id="demoStatus" class="demo-status" aria-live="polite">本地体验已准备好，点击载入后核对当前状态。</output>
+<div id="demoResults" hidden><div class="demo-stats"><div><span>账户余额</span><strong><b id="demoBalance">—</b><small>本地测试币</small></strong></div><div><span>当前密钥代数</span><strong id="demoEpoch">—</strong></div><div><span>剩余交易叶</span><strong id="demoLeaves">—</strong></div></div>
+<p class="demo-address"><span>演示账户</span><code id="demoAddress"></code></p>
+<details class="demo-history"><summary>已完成的账户旅程 · 6 笔交易</summary><ol id="demoReceipts" aria-label="已核对的本地交易回执"></ol><div class="demo-history-footer"><p>付款账户支付的总费用<strong id="demoFee">—</strong></p><button id="exportDemo">导出体验记录</button></div></details></div>
+</section>
+<section class="transfer" id="wallet">
+<div>
+<label>TRANSACTION BUILDER</label>
+<h2>准备测试转账</h2>
+<p>输入测试账户与收款信息，计算待签名摘要。账户和叶号需与链上状态一致。</p>
+<form id="transferForm">
+<label>网络<select name="chain">
+<option value="97">BSC Testnet · 97</option>
+<option value="31337">Anvil · 31337</option>
+</select>
+</label>
+<label>智能账户地址<input name="account" required placeholder="0x…" pattern="0x[0-9a-fA-F]{40}">
+</label>
+<label>状态来源<select name="source">
+<option value="manual">离线草稿 · 手动状态</option>
+<option value="chain">链上同步 · 每次生成前读取</option>
+</select>
+</label>
+<label>测试网 RPC<input name="rpc" type="url" placeholder="HTTPS 测试网 RPC，或 http://127.0.0.1:8950">
+</label>
+<div class="account-actions"><button type="button" id="syncAccount">同步账户状态</button><button type="button" id="copyAccount" disabled>复制账户地址</button></div>
+<output id="accountStatus" aria-live="polite">账户状态待同步</output>
+<dl id="accountDetails" hidden>
+<dt>账户余额</dt>
+<dd id="accountBalance">
+</dd>
+<dt>快照区块</dt>
+<dd id="accountBlock">
+</dd>
+<dt>剩余日常交易叶</dt>
+<dd id="accountLeaves">
+</dd>
+<dt>当前根</dt>
+<dd id="accountRoot">
+</dd>
+</dl>
+<label>收款地址<input name="recipient" required placeholder="0x…" pattern="0x[0-9a-fA-F]{40}">
+</label>
+<label>金额（测试币）<input name="amount" required inputmode="decimal" placeholder="0.01">
+</label>
+<div class="form-pair">
+<label>换根代数<input name="epoch" required type="number" min="0" max="4294967295" value="1">
+</label>
+<label>交易叶号<input name="leaf" required type="number" min="0" max="1024" value="0">
+</label>
+</div>
+<button id="prepare" class="run">生成待签名摘要</button>
+</form>
+</div>
+<div class="transaction-review">
+<label>TRANSACTION REVIEW</label>
+<h2>交易预览</h2>
+<output id="transferResult" aria-live="polite">填写交易信息后查看结果。</output>
+<p>链上模式使用区块时间计算 10 分钟有效期。草稿包含状态快照，叶号预留和签名将在后续接入。</p>
+<button id="exportTransfer" disabled>导出交易草稿</button>
+</div>
+</section>
+
+</main><footer class="site-footer"><a class="brand" href="./index.html"><img class="brand-symbol" src="./assets/aurven-mark-web.png" width="48" height="48" alt="" aria-hidden="true">AURVEN</a><span>面向 BSC 的哈希签名智能账户</span><small>LOCAL / TESTNET PROTOTYPE</small></footer></body></html>
