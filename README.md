@@ -41,7 +41,19 @@ The demo creates fresh disposable keys and a new account on your own machine. Op
 
 The sections below document successive implementation stages. Test counts and pending work in a stage describe that stage; see [SECURITY.md](SECURITY.md) for the release-check summary and known limitations.
 
-## Latest milestone: browser signature self-check (2026-11-05)
+## Latest milestone: persistent read-only activity (2026-11-05)
+
+Test Wallet now saves verified test-account associations and transaction hashes in a separate browser-local database. Sync an account, choose **Save to local tracker**, and add a hash. The local demo can add all six existing transactions at once. **Check all transactions** reads fresh observations; reloading only shows saved results and does not automatically contact an RPC. **Use in transaction draft** fills the account details and requires a fresh state sync before creating a chain-based draft.
+
+The tracker distinguishes pending, included/succeeded, included/reverted, not found, unavailable receipt, changed block association and failed checks. It checks the selected network, account association, transaction/receipt consistency, canonical block membership and read-time block stability. Successful observations display block confirmations, fees in wei and any account `Executed` events, including epoch and leaf. Confirmations from one RPC are not a finality guarantee. An account association is watch-only and does not establish ownership of its keys.
+
+Records survive page reloads. Atomic writes and request tokens keep an older tab's response from replacing a newer check. The database holds up to eight accounts and 96 hashes per account. RPC URLs remain in page memory and are omitted from storage and exports. Public JSON exports contain addresses and activity, so treat them as linkable information even though they contain no private keys. Clearing site data removes local history; report import and synchronization are not implemented.
+
+This tracker never opens the encrypted vault and cannot release or reuse a consumed signing leaf. A missing or reverted transaction is not permission to sign again with the same key. Browser account signing, signed-payload recovery and rebroadcast are still separate work.
+
+Validation adds 25 Node tests and a four-check browser harness for actual IndexedDB persistence, concurrent connections, stale-response rejection, aborted writes and account limits. Browser acceptance checked the six existing local-chain receipts, reload persistence, RPC URL non-persistence, public export, draft handoff, Chinese / English copy and mobile layout. Contracts and cryptographic parameters are unchanged. See [transaction tracking boundaries](docs/KEY_STATE.md#read-only-account-activity).
+
+## Previous milestone: browser signature self-check (2026-11-05)
 
 The Test Wallet page now connects its encrypted test vault to a background worker that builds a complete verification-only key tree. It shows generation progress, supports cancellation, records a leaf before each signature, independently checks the result and exports a public JSON proof. The tampering control changes a copy of the signed message and shows verification rejection. Chinese / English switching preserves the original signed message and protocol fields. Locking or leaving the page terminates the worker; reopening rebuilds the same tree and continues from its persisted journal.
 

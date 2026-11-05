@@ -1,9 +1,10 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#090b0d"><meta name="description" content="AURVEN · 面向 BSC 的实验性哈希签名智能账户。测试钱包。"><title>测试钱包 · AURVEN</title><link rel="icon" href="./assets/aurven-mark-web.png" type="image/png"><link rel="stylesheet" href="./v2.css"><script type="module" src="./i18n.js?v=1"></script><script type="module" src="./transfer-ui.js?v=4"></script><link rel="stylesheet" href="./aurven-materials.css?v=4"><script type="module" src="./aurven-materials.js?v=1"></script><link rel="stylesheet" href="./wallet-experience.css?v=1"><link rel="stylesheet" href="./i18n.css?v=1"><link rel="stylesheet" href="./project-links.css?v=2"><script type="module" src="./project-links.js?v=1"></script><link rel="stylesheet" href="./vault-storage.css?v=2"><script type="module" src="./vault-ui.js?v=2"></script></head><body class="aurven page-wallet"><a class="skip-link" href="#main">跳到主要内容</a><header class="site-header"><a class="brand" href="./index.html" aria-label="AURVEN 首页"><img class="brand-symbol" src="./assets/aurven-mark-web.png" width="48" height="48" alt="" aria-hidden="true"><span>AURVEN</span></a><nav aria-label="主导航"><a href="./index.html">项目介绍</a><a href="./flow.html">资金流动</a><a href="./lab.html">验证实验室</a><a href="./wallet.html" aria-current="page">测试钱包</a><a href="./token.html">项目代币</a><a class="nav-github" href="https://github.com/AURVENwallet/AURVEN" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看源码（新窗口）">GitHub <span aria-hidden="true">↗</span></a></nav><div class="header-actions"><span class="site-badge">测试原型</span><div class="language-switch" role="group" aria-label="选择语言" data-i18n-ignore><button type="button" data-language="zh-CN" lang="zh-CN" aria-pressed="true">中文</button><button type="button" data-language="en" lang="en" aria-pressed="false">EN</button></div></div></header><main id="main" class="content-width tool-page">
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https: http://localhost:* http://127.0.0.1:* http://[::1]:*; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="referrer" content="no-referrer"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#090b0d"><meta name="description" content="AURVEN · 面向 BSC 的实验性哈希签名智能账户。测试钱包。"><title>测试钱包 · AURVEN</title><link rel="icon" href="./assets/aurven-mark-web.png" type="image/png"><link rel="stylesheet" href="./v2.css"><script type="module" src="./i18n.js?v=1"></script><script type="module" src="./transfer-ui.js?v=5"></script><link rel="stylesheet" href="./aurven-materials.css?v=4"><script type="module" src="./aurven-materials.js?v=1"></script><link rel="stylesheet" href="./wallet-experience.css?v=1"><link rel="stylesheet" href="./i18n.css?v=1"><link rel="stylesheet" href="./project-links.css?v=2"><script type="module" src="./project-links.js?v=1"></script><link rel="stylesheet" href="./vault-storage.css?v=2"><script type="module" src="./vault-ui.js?v=2"></script><link rel="stylesheet" href="./activity.css?v=1"></head><body class="aurven page-wallet"><a class="skip-link" href="#main">跳到主要内容</a><header class="site-header"><a class="brand" href="./index.html" aria-label="AURVEN 首页"><img class="brand-symbol" src="./assets/aurven-mark-web.png" width="48" height="48" alt="" aria-hidden="true"><span>AURVEN</span></a><nav aria-label="主导航"><a href="./index.html">项目介绍</a><a href="./flow.html">资金流动</a><a href="./lab.html">验证实验室</a><a href="./wallet.html" aria-current="page">测试钱包</a><a href="./token.html">项目代币</a><a class="nav-github" href="https://github.com/AURVENwallet/AURVEN" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看源码（新窗口）">GitHub <span aria-hidden="true">↗</span></a></nav><div class="header-actions"><span class="site-badge">测试原型</span><div class="language-switch" role="group" aria-label="选择语言" data-i18n-ignore><button type="button" data-language="zh-CN" lang="zh-CN" aria-pressed="true">中文</button><button type="button" data-language="en" lang="en" aria-pressed="false">EN</button></div></div></header><main id="main" class="content-width tool-page">
 <div class="page-intro">
 <label>TEST WALLET / TRANSACTION</label>
 <h1 class="page-title">每一次授权，<br>先看清楚<span>。</span>
 </h1>
 <p>同步测试账户，核对状态，准备待签名交易。</p>
+<a class="activity-shortcut" href="#activity">查看交易记录 ↓</a>
 </div>
 <section class="key-vault" aria-labelledby="vaultTitle">
 <div class="vault-header"><div><p class="eyebrow">YOUR KEYS / LOCAL VAULT</p><h2 id="vaultTitle">测试密钥，留在你的浏览器。</h2><p>在本机生成测试密钥，用独立密码加密保存。密码和密钥不会由此功能上传到服务器。</p></div><span class="vault-badge" id="vaultBadge">尚未创建</span></div>
@@ -46,7 +47,7 @@
 <output id="demoStatus" class="demo-status" aria-live="polite">本地体验已准备好，点击载入后核对当前状态。</output>
 <div id="demoResults" hidden><div class="demo-stats"><div><span>账户余额</span><strong><b id="demoBalance">—</b><small>本地测试币</small></strong></div><div><span>当前密钥代数</span><strong id="demoEpoch">—</strong></div><div><span>剩余交易叶</span><strong id="demoLeaves">—</strong></div></div>
 <p class="demo-address"><span>演示账户</span><code id="demoAddress"></code></p>
-<details class="demo-history"><summary>已完成的账户旅程 · 6 笔交易</summary><ol id="demoReceipts" aria-label="已核对的本地交易回执"></ol><div class="demo-history-footer"><p>付款账户支付的总费用<strong id="demoFee">—</strong></p><button id="exportDemo">导出体验记录</button></div></details></div>
+<details class="demo-history"><summary>已完成的账户旅程 · 6 笔交易</summary><ol id="demoReceipts" aria-label="已核对的本地交易回执"></ol><div class="demo-history-footer"><p>付款账户支付的总费用<strong id="demoFee">—</strong></p><button type="button" id="trackDemo">跟踪这 6 笔交易</button><button id="exportDemo">导出体验记录</button></div></details></div>
 </section>
 <section class="transfer" id="wallet">
 <div>
@@ -68,7 +69,7 @@
 </label>
 <label>测试网 RPC<input name="rpc" type="url" placeholder="HTTPS 测试网 RPC，或 http://127.0.0.1:8950">
 </label>
-<div class="account-actions"><button type="button" id="syncAccount">同步账户状态</button><button type="button" id="copyAccount" disabled>复制账户地址</button></div>
+<div class="account-actions"><button type="button" id="syncAccount">同步账户状态</button><button type="button" id="copyAccount" disabled>复制账户地址</button><button type="button" id="trackAccount" disabled>关联到本地跟踪</button></div>
 <output id="accountStatus" aria-live="polite">账户状态待同步</output>
 <dl id="accountDetails" hidden>
 <dt>账户余额</dt>
@@ -104,6 +105,26 @@
 <p>链上模式使用区块时间计算 10 分钟有效期。草稿包含状态快照，叶号预留和签名将在后续接入。</p>
 <button id="exportTransfer" disabled>导出交易草稿</button>
 </div>
+</section>
+
+<section class="account-activity" id="activity" aria-labelledby="activityTitle">
+<div class="activity-heading"><div><p class="eyebrow">ACCOUNT ACTIVITY / READ ONLY</p><h2 id="activityTitle">每一笔进展，有迹可循。</h2><p>保存测试账户和交易哈希，重新打开页面后继续核对。只读关联不代表你持有该账户的密钥。</p></div><div class="activity-total"><b id="activityCount">00</b><span>已记录交易</span></div></div>
+<div class="activity-layout"><div><form id="activityForm"><fieldset id="activityControls" class="activity-controls">
+<label for="activitySelect">已关联测试账户<select id="activitySelect" disabled></select></label>
+<code id="activityAccount" class="activity-address">—</code>
+<button type="button" id="activityUse" disabled>填入交易草稿</button>
+<label for="activityRpc">核对用 RPC<input id="activityRpc" type="url" placeholder="HTTPS 测试网 RPC，或 http://127.0.0.1:8950" autocomplete="off"></label>
+<p class="activity-notice">RPC 地址仅在本次页面停留期间使用，不会保存在记录或导出文件中。</p>
+<label for="activityHash">交易哈希<input id="activityHash" placeholder="0x…" pattern="0x[0-9a-fA-F]{64}" required maxlength="66" autocomplete="off"></label>
+<div class="activity-actions"><button type="submit" id="activityAdd" disabled>加入跟踪</button><button type="button" class="run" id="activityCheck" disabled>核对全部交易</button><button type="button" id="activityCancel" hidden>取消核对</button></div>
+</fieldset></form>
+<div class="activity-actions"><button type="button" id="activityExport" disabled>导出公开记录</button></div>
+<p class="activity-notice">最多保存 8 个账户，每个账户 96 笔交易。记录仅在当前浏览器保存；清除网站数据后将丢失。</p>
+</div><div class="activity-log"><p id="activityEmpty" class="activity-empty">先在上方同步账户，再点击“关联到本地跟踪”。本地演示也可以一次加入 6 笔交易。</p><ol id="activityRows" class="activity-list" aria-label="已保存的交易记录"></ol>
+<p class="activity-notice">显示的是上次核对结果，刷新页面不会自动联网。单个 RPC 的区块确认数不代表最终确认。</p>
+<p class="activity-notice">交易回滚、查不到或区块变化，都不会释放已使用的签名叶号。这里的记录不能代替密钥库使用日志。</p>
+</div></div>
+<output id="activityStatus" class="activity-status" aria-live="polite">显示本机保存的记录。核对前请确认 RPC 网络。</output>
 </section>
 
 </main><footer class="site-footer"><a class="brand" href="./index.html"><img class="brand-symbol" src="./assets/aurven-mark-web.png" width="48" height="48" alt="" aria-hidden="true">AURVEN</a><span>面向 BSC 的哈希签名智能账户</span><small>LOCAL / TESTNET PROTOTYPE</small></footer></body></html>

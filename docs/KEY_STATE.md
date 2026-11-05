@@ -35,6 +35,18 @@ The exported `aurven-local-proof-v1` JSON includes the message, public identity,
 
 Once a reservation is committed, cancellation, a locked tab, failed signing, a reverted transaction, RPC timeout or missing receipt must not reclaim the leaf. It is acceptable to waste a leaf. It is not acceptable to sign another digest with it. The existing contract can accept a later unused leaf; the future signing UI must reconcile the authenticated local journal with chain state before choosing one.
 
+## Read-only account activity
+
+The activity panel associates a chain ID and account address only after the existing reader checks the deployed runtime pin and a consistent account-state snapshot. This is a watch-only association. It does not compare that account's root with a tree derived from the encrypted vault, and must not be treated as proof of key ownership.
+
+`aurven-readonly-activity-v1` is a separate IndexedDB database for public metadata. It holds at most eight accounts, with 96 transaction hashes per account. Each account row and its transaction records are updated atomically. Checks assign a unique request token; a late response can update a row only if its token is still current. A reload never silently resumes an interrupted check or treats saved observations as fresh. RPC URLs, which may contain provider credentials in a path or query, remain in session memory and are omitted from exports.
+
+The checker compares chain IDs, account/transaction association, transaction and receipt block hashes, canonical block membership, and the original head's hash after reading. Account creation is associated only when its receipt names the watched contract. Status zero means reverted; no receipt is pending, missing or unavailable depending on the accompanying transaction and prior evidence. A previous successful result does not remain a current success if a later check is uncertain or fails. A re-included transaction can show a different block explicitly. `Executed` events identify observed epochs and leaves; they are not a complete history of signatures created off-chain. One RPC can still fabricate a consistent view, and a confirmation count is not finality.
+
+There is no vault import, leaf reservation or signing command in the tracker. Missing, reverted, canceled or reorganized observations cannot remove an encrypted journal entry. Public reports contain addresses, hashes, snapshot roots and observed activity, but no passwords, private seeds or RPC URLs. They are linkable public metadata, not encrypted backups; this version has no report-import or synchronization function. Clearing the browser's site data removes the records.
+
+For browser storage checks, copy `test/browser/activity-checks.html` and `test/browser/activity-checks.js` into ignored `ui/demo/`, then open `/demo/activity-checks.html` on the loopback preview and choose **Run activity checks**. The harness uses its own disposable database and does not access the vault or any RPC.
+
 ## Encryption and browser boundaries
 
 - Fresh 32-byte random seed, random 16-byte vault identifier and salt; only chain IDs 97 and 31337.

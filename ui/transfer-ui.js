@@ -1,5 +1,6 @@
 import {prepareTransfer} from './transfer.js';
 import {readAccount} from './account-state.js';
+import {trackAccount} from './activity-ui.js';
 import {fetchDemoReport,verifyLocalDemo,LOCAL_DEMO_RPC,DEMO_STAGES} from './local-demo.js';
 
 const get = id => document.getElementById(id);
@@ -11,6 +12,7 @@ let version = 0;
 let confirmedAccount;
 let verifiedDemo;
 let demoLoading=false;
+let trackingState;
 
 // A public host has no access to the visitor's locally generated demo record.
 // Keep the complete signed-demo flow on the visitor's own loopback preview.
@@ -24,6 +26,7 @@ if (!['localhost','127.0.0.1','[::1]'].includes(location.hostname)) {
 }
 
 function invalidate() {
+  trackingState=undefined;get('trackAccount').disabled=true;
   version += 1;
   controller?.abort();
   if(demoLoading){demoLoading=false;get('demoStatus').textContent='载入已取消，可重新载入演示账户。';}
@@ -69,6 +72,7 @@ function formatBalance(wei) {
 }
 
 function showAccount(state) {
+  trackingState=state;get('trackAccount').disabled=false;
   field('epoch').value=state.epoch;field('leaf').value=state.next;
   confirmedAccount={account:state.account,chainId:state.chainId,endpoint:field('rpc').value.trim()};
   get('copyAccount').disabled=false;
@@ -177,6 +181,19 @@ get('copyAccount').onclick=async()=>{
   }catch{get('accountStatus').textContent='浏览器未允许复制，请从账户地址栏手动复制。';}
 };
 
+get('trackAccount').onclick=async()=>{
+  if(!trackingState)return;
+  try{await trackAccount(trackingState,field('rpc').value.trim());}
+  catch{get('accountStatus').textContent='本地记录存储不可用或已达到上限。';}
+};
+document.addEventListener('aurven:watch-account',event=>{
+  invalidate();confirmedAccount=undefined;verifiedDemo=undefined;
+  get('copyAccount').disabled=true;get('demoResults').hidden=true;
+  field('account').value=event.detail.account;field('chain').value=event.detail.chainId;
+  field('rpc').value=event.detail.endpoint;field('source').value='chain';updateSourceFields();
+  get('accountStatus').textContent='只读账户已填入，请重新同步链上状态。';
+});
+
 function showDemo(result){
   verifiedDemo=result;
   const {state,receipts}=result;
@@ -222,6 +239,12 @@ get('exportDemo').onclick=()=>{
   const url=URL.createObjectURL(new Blob([JSON.stringify(verifiedDemo,null,2)],{type:'application/json'}));
   const a=document.createElement('a');a.href=url;a.download='aurven-local-demo-receipts.json';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+
+get('trackDemo').onclick=async()=>{
+  if(!verifiedDemo)return;
+  try{await trackAccount(verifiedDemo.state,LOCAL_DEMO_RPC,verifiedDemo.receipts.map(row=>row.hash));}
+  catch{get('demoStatus').textContent='本地记录存储不可用或已达到上限。';}
 };
 
 
