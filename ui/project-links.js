@@ -1,7 +1,11 @@
 const contractAddress='0x8614876e509c18d7be305a39a4a8d9e69c5effff';
 async function copyAddress(){
+  let copyTimer;
   try{
-    await navigator.clipboard.writeText(contractAddress);
+    await Promise.race([
+      navigator.clipboard.writeText(contractAddress),
+      new Promise((_,reject)=>{copyTimer=setTimeout(()=>reject(new Error('Clipboard unavailable')),1000);})
+    ]);
     return;
   }catch{
     const previousFocus=document.activeElement;
@@ -17,6 +21,8 @@ async function copyAddress(){
       field.remove();
       previousFocus?.focus({preventScroll:true});
     }
+  }finally{
+    clearTimeout(copyTimer);
   }
 }
 document.querySelectorAll('[data-copy-ca]').forEach(button=>{

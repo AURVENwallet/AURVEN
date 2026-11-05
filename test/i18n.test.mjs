@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {translateText,normalizeLanguage} from '../ui/i18n-copy.js';
 
-test('all four pages expose language controls and English static copy',()=>{
-  for(const name of ['index','flow','lab','wallet']){
+test('all five pages expose language controls and English static copy',()=>{
+  for(const name of ['index','flow','lab','wallet','token']){
     const html=readFileSync(new URL('../ui/'+name+'.html',import.meta.url),'utf8');
     assert.match(html,/data-language="zh-CN"/);assert.match(html,/data-language="en"/);
     assert.match(html,/src="\.\/i18n.js\?v=1"/);

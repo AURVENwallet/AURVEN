@@ -10,7 +10,7 @@ for(const path of paths){
   assert.ok(!prohibited.test(path),'Local or sensitive path is tracked: '+path);
   assert.ok(!lstatSync(path).isSymbolicLink(),'Review symlinks before publishing: '+path);
 }
-for(const page of ['index','flow','lab','wallet']){
+for(const page of ['index','flow','lab','wallet','token']){
   const html=readFileSync('ui/'+page+'.html','utf8');
   const policy=html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
   assert.ok(policy,'Missing page policy: '+page);
@@ -24,4 +24,4 @@ for(const page of ['index','flow','lab','wallet']){
   }
   assert.doesNotMatch(html,/\son(?:click|load|error|submit|change)\s*=/i,'Inline event handler: '+page);
 }
-console.log('PASS: '+paths.length+' tracked files; local data excluded; four page policies verified.');
+console.log('PASS: '+paths.length+' tracked files; local data excluded; five page policies verified.');
