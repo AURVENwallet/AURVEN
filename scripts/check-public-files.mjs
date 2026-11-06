@@ -8,6 +8,7 @@ assert.ok(paths.length,'No tracked files to check');
 const prohibited=/(^|\/)(?:\.env(?:\..*)?|demo-runs|out|cache|broadcast|node_modules)(\/|$)|^ui\/demo\/|(?:\.pem|\.key|\.p12|\.pfx|\.keystore|\.wallet|\.log)$|(?:^|\/)aurven-(?:test-vault|public-proof|activity)-.*\.json$/i;
 for(const path of paths){
   assert.ok(!prohibited.test(path),'Local or sensitive path is tracked: '+path);
+  assert.ok(!/(?:^|\/)(?:signed|spent-[^/]+)\.json$/i.test(path),'Private pilot state is tracked: '+path);
   assert.ok(!lstatSync(path).isSymbolicLink(),'Review symlinks before publishing: '+path);
 }
 for(const page of ['index','flow','lab','wallet','token']){

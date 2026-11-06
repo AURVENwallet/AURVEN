@@ -1,6 +1,32 @@
 # BSC wallet release readiness
 
-Updated 2026-11-06. The single-signer wallet runs locally. On BSC testnet (chain 97) the browser can inspect accounts, review drafts and reserve leaves. Signed browser simulation runs on the disposable local chain. The public testnet has gas estimates for the contract, with mined end-to-end receipts still pending. The project token has a separate contract and release history.
+Updated 2026-11-06. A disposable command-line pilot completed a native transfer on BSC testnet (chain 97). The browser can inspect public accounts, review drafts and reserve leaves. Signed browser simulation runs on the disposable local chain. Browser submission, active-tree rotation on public testnet and device recovery remain open. The project token has a separate contract and release history.
+
+## First mined testnet transfer
+
+A fresh payer received faucet tBNB and created the smart account `0x84223b72b46e20748861b9536aa96132e31a3b3f`. The payer activated its first signing tree and funded the account with one wei of tBNB. The account used leaf 0 to return that wei to the payer. Its final balance was zero, the epoch was 1 and the next permitted leaf was 1. The pilot discarded the signing seeds. Use the published account only for observation.
+
+| Operation | Mined gas used | Public receipt |
+| --- | ---: | --- |
+| Create the smart account | 1,289,010 | [Deployment](https://testnet.bscscan.com/tx/0x60938636335b179e7eabc61a03ccd97c81fafdb2f858d9ee56a2942e8f9b5bf2) |
+| Activate the first signing tree | 193,385 | [Activation](https://testnet.bscscan.com/tx/0xad5e2feb8ccd6eae311f17be0617538ffbabab04a82cde47fcd4b2680e673aaa) |
+| Fund the smart account | 21,067 | [Funding](https://testnet.bscscan.com/tx/0xc7246721bdd65e44f87b6a83449f9f1d31127b37e6ae162528a52d880cf56374) |
+| Execute the native transfer | 203,411 | [Transfer](https://testnet.bscscan.com/tx/0x9e36f3ac70946345ed88afe3f6a6f2f76ea317bf07fb1bdb21b5053b6c34c7e2) |
+
+Two official endpoints agreed on the four receipt hashes, block hashes, fees and final account state. The payer spent 0.0001706873 tBNB in total fees. The locally signed transfer used a selected salt, so its verification work differs from the fixed-salt gas fixtures below.
+
+### Reproduce the disposable command-line pilot
+
+Use Node.js 22+, Foundry 1.8.1 and a fresh dedicated payer with nonce zero. Build with `forge build`. Set `ETH_KEYSTORE` to its encrypted Foundry keystore file and `ETH_PASSWORD` to the path of its private password file. Keep both outside the repository. Obtain only test tBNB. [BNB Chain's faucet instructions](https://docs.bnbchain.org/docs/bsc-faucet/).
+
+```sh
+node scripts/testnet-pilot.mjs prepare <testnet-payer-address>
+node scripts/testnet-pilot.mjs submit <testnet-payer-address>
+```
+
+Preparation reserves each one-time leaf on disk before signing, signs four fixed transactions offline, and saves their exact bytes and hashes together under the ignored `demo-runs/testnet97/` directory. Keep this directory private. Anyone with the signed bytes can submit those specific test transactions. The transfer has a 30-minute deadline. If submission is interrupted, rerun **submit** with the same address and directory. It checks each saved hash and only resends the original bytes if the transaction is absent, its nonce is available and the deadline has time left. An expired, reverted or conflicting run requires inspection. Signing seeds are never saved, so this trial cannot restore the account or sign another transfer.
+
+The local Anvil regression exercises a lost submission reply after the transfer is mined, a rollback that removes that transfer, and an expired retry. It verifies that the confirmed transfer is found without sending again and that a missing transfer can be replayed with identical bytes and hash.
 
 ## What the testnet can execute today
 

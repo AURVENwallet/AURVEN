@@ -1,5 +1,6 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '在 BscScan 查看首笔测试网转账 ↗':'View the first testnet transfer on BscScan ↗',
   '从零开始本地试签':'Start a local signing demo',
   '在自己的电脑上安装 Git、Node.js 22 或更高版本和 Foundry，然后在终端运行以下命令。':'Install Git, Node.js 22 or later, and Foundry on your computer. Then run these commands in a terminal.',
   '打开终端显示的本机地址，设置演示密码并配对账户。按 Ctrl+C 可结束本次演示。':'Open the local URL printed in the terminal, set a demo password and pair your account. Press Ctrl+C to end the session.',

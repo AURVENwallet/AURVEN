@@ -18,6 +18,8 @@
 *.wallet
 *TEST-KEYS*.json
 reservations.jsonl
+signed.json
+spent-*.json
 aurven-test-vault-*.json
 aurven-public-proof-*.json
 .DS_Store
