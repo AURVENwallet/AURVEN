@@ -1,6 +1,6 @@
 # BSC wallet release readiness
 
-Updated 2026-11-06. An encrypted browser vault created a reusable smart account on BSC testnet (chain 97), signed two transfers, rotated to a fresh active tree, and signed a third transfer from the same address. Lost-device recovery, deep reorganization drills and independent security review remain open.
+Updated 2026-11-06. An encrypted browser vault created a reusable smart account on BSC testnet (chain 97), signed two transfers, rotated to a fresh active tree, and signed a third transfer from the same address. Two separate browser profiles also completed a public testnet handover and the receiver signed a one-wei transfer. Lost-device recovery, deep reorganization drills and independent security review remain open.
 
 ## Reusable browser account
 
@@ -67,7 +67,7 @@ A separate read-only run queried the public BSC testnet sample account at block 
 
 Two isolated Edge profiles exercised the local launcher on chain 31337. The original profile paired the account and signed a simulated transfer at epoch 1. The receiving profile generated its own epoch-2 root. An incorrect fingerprint consumed no source leaf. The original profile then submitted the rotation using leaf 960. After a reload, the receiver checked the retired-key proof, exact calldata, receipt, canonical inclusion and current root. Its first transfer simulation succeeded. Replaying the old, unexpired transfer at the same address returned `BadSignature`.
 
-The drill requires one subsequent local block. Automated checks cover an altered or expired offer and a chain rollback. Public-testnet confirmation policy, multiple independent observations, interrupted submissions, historical-root enforcement and independent lost-device recovery remain open. [Run the two-profile drill](../README.md#rehearse-a-device-handover).
+The drill requires one subsequent local block. Automated checks cover an altered or expired offer and a chain rollback. The chain-97 pilot below uses a separate finalized-receipt policy. Historical-root enforcement and independent lost-device recovery remain open. [Run the two-profile drill](../README.md#rehearse-a-device-handover).
 
 ### Recovering a rotation after a lost reply
 
@@ -75,7 +75,19 @@ The receiving browser can verify a portable public record on chain 97. Both BSC 
 
 On 2026-11-06 both public endpoints rejected the historical filtered log query and reported pruned historical nonce state near the published epoch-2 rotation. With the transaction hash omitted, the browser found the payment in block **141084075** by reading block bodies. Both endpoints confirmed the receipt and the active epoch-2 root at common finalized block **141103334**. The bundled example starts five blocks before inclusion. Exports from the managed wallet use the actual preview start block. This public check observed an existing same-vault rotation. [Published transaction](https://testnet.bscscan.com/tx/0x9df38d9e37eb01e9bcaedf6a207e69fdb58e5b052b0854d5fe5c5cb5df78b69e).
 
-Two local interruption drills withheld the sender's reply after submitting a real rotation to Anvil. On chain 31337 the receiving profile recovered the cross-device handover hash and the original journal retained its rotation leaf after reload. Separately, on a chain-97 fixture the locked managed wallet exported its rotation record. A clean browser recovered the exact hash from that file without a wallet or a second submission. Withholding one endpoint suppressed the result. The chain-97 fixture used two routes to one local node. Public cross-device signing, recovery of an unmined authorization, and independent recovery after losing the original signer remain open.
+Two local interruption drills withheld the sender's reply after submitting a real rotation to Anvil. On chain 31337 the receiving profile recovered the cross-device handover hash and the original journal retained its rotation leaf after reload. Separately, on a chain-97 fixture the locked managed wallet exported its rotation record. A clean browser recovered the exact hash from that file without a wallet or a second submission. Withholding one endpoint suppressed the result. The chain-97 fixture used two routes to one local node. The public handover pilot below exercises the signing path. Recovery of an unmined authorization and independent recovery after losing the original signer remain open.
+
+### Public two-profile handover
+
+On 2026-11-06 two isolated Edge profiles on one computer created separate encrypted vaults. The source created a fresh [BSC testnet smart account](https://testnet.bscscan.com/address/0xba8ac0bd1bedc0b7948a491ea8f9d0b2a02c687d). The receiver generated its own successor key. A mismatching fingerprint stopped the source before signing. After reviewing the matching fingerprint the source authorized a rotation. Both profiles used the dedicated faucet payer for gas.
+
+| Operation | Mined block and receipt | Gas used |
+| --- | ---: | ---: |
+| Create the account, activate epoch 1 and deposit 3 wei | [141107976](https://testnet.bscscan.com/tx/0x24df180a9e9650315a41b5e404e635cc8150813b5545b3748feb5c630c4bcd47) | 1,546,071 |
+| Hand over to the receiving vault, epoch 1 leaf 960 | [141108169](https://testnet.bscscan.com/tx/0xd9a529c08102ec3e36b931af171edc78c438b87032bce0fd142a9ff8343c39d1) | 197,155 |
+| Transfer 1 wei from the receiving vault, epoch 2 leaf 0 | [141108305](https://testnet.bscscan.com/tx/0xe73f994fce608776b2c01a48a96b1ee321b98e09793e9ae463947fd616feed8f) | 182,306 |
+
+The receiving profile matched the public record to its saved request, verified the WOTS signature and finalized receipt on both endpoints, then reloaded and unlocked its own vault before signing. At shared finalized block 141108830, both endpoints reported epoch 2, next leaf 1 and a balance of 2 wei. A subsequent signing attempt in the old profile stopped at the root comparison before another leaf reservation or payer request. Total gas fees for the three transactions were 0.0001925532 tBNB. The trial used independent browser storage and a constrained test payer on one machine. Physical-device, retail-wallet and independent recovery testing remain open. [Try the public testnet flow](https://aurven.site/wallet.html#testnetHandover).
 
 ## Disposable browser transfer
 
@@ -140,7 +152,7 @@ These estimates assume continuous development of the single-signer native-coin w
 | Milestone | Planning range from this baseline | Evidence required to pass |
 | --- | --- | --- |
 | Single-device public testnet pilot | Basic path completed on 2026-11-06 | Five mined actions and recovery after a lost payer reply are recorded above. Local drills now cover dropped, replaced, reverted and reorganized payments. Remaining pilot work includes retail wallet compatibility, testing against restricted RPC history and observing a wider range of public network conditions. |
-| Recovery and pilot | Allow a further 4–8 weeks for engineering and drills | Persist the exact signed payload before releasing it. Reproduce receipt recovery across independent RPC outages, deep reorganizations and device loss while preserving every previously used leaf. Demonstrate safe device handover, lost-device recovery, historical-root rejection and fail-closed behavior after restoring an old profile. Run a public testnet pilot through those scenarios. |
+| Recovery and pilot | Allow a further 4–8 weeks for engineering and drills | Persist the exact signed payload before releasing it. Reproduce receipt recovery across independent RPC outages, deep reorganizations and device loss while preserving every previously used leaf. Repeat the two-profile handover on physical devices and test lost-device recovery, historical-root rejection and fail-closed behavior after restoring an old profile. Run a public testnet pilot through those scenarios. |
 | Public real-asset wallet | Conditional planning range of 3–6 months total | Obtain independent cryptographic parameter and contract/client reviews, fix and retest findings, and publish results. Resolve custody and key-reuse findings before launch. Verify network-specific builds, deployment reproducibility, live monitoring, incident response and a funded mainnet gas payer. Obtain explicit mainnet deployment approval. |
 
 With the existing server, local tools and faucet tBNB, early testing can proceed on the current budget. The independent review needs a confirmed volunteer, sponsor or funding. Mainnet deployment needs real BNB for gas. Until those resources and the technical gates are satisfied, a public launch date is open. [BNB Smart Chain testing and gas](https://docs.bnbchain.org/bnb-smart-chain/developers/quick-guide/) · [Key management and recovery](KEY_STATE.md) · [Current security status](../SECURITY.md).

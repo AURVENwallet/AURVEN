@@ -37,6 +37,10 @@ export function parseBackup(text){
 }
 export function validateReservation(row){
   const fields=['chainId','account','epoch','pubSeed','root','leaf','digest'];
+  if(row && Object.hasOwn(row,'handoverOut')){
+    fields.push('handoverOut');
+    if(row.handoverOut!==true || row.chainId!==97 || row.epoch<1 || row.leaf<960)fail('RESERVATION');
+  }
   if(row && Object.hasOwn(row,'simulationAttempt')){
     fields.push('simulationAttempt');
     if(row.simulationAttempt!==true || row.chainId!==31337 || row.epoch<1 || row.leaf>=960)fail('RESERVATION');
@@ -53,7 +57,16 @@ export function validateReservation(row){
 export const reservationId=row=>row.pubSeed+':'+row.root+':'+row.leaf;
 export const handoverFields=Object.freeze(['format','chainId','account','epoch','oldSeed','oldRoot','newSeed','newRoot','deadline']);
 export function validateOffer(offer) {
-  if(!keys(offer,handoverFields) || offer.format!=='aurven-local-handover-v1' || offer.chainId!==31337 || offer.epoch!==1 ||
+  if(offer?.format!=='aurven-local-handover-v1' || offer.chainId!==31337 || offer.epoch!==1)fail('HANDOVER_OFFER');
+  return validateOfferFields(offer);
+}
+export function validateTestnetOffer(offer){
+  if(offer?.format!=='aurven-testnet-handover-v1' || offer.chainId!==97 || !Number.isInteger(offer.epoch) ||
+    offer.epoch<1 || offer.epoch>=0xffffffff)fail('HANDOVER_OFFER');
+  return validateOfferFields(offer);
+}
+function validateOfferFields(offer){
+  if(!keys(offer,handoverFields) ||
     typeof offer.account!=='string'||!/^0x[0-9a-f]{40}$/.test(offer.account) || !Number.isSafeInteger(offer.deadline) || offer.deadline<=0 ||
     !['oldSeed','oldRoot','newSeed','newRoot'].every(k=>typeof offer[k]==='string'&&/^0x[0-9a-f]{32}$/.test(offer[k])&&!/^0x0+$/.test(offer[k])) ||
     offer.oldSeed===offer.newSeed || offer.oldRoot===offer.newRoot)fail('HANDOVER_OFFER');
@@ -65,6 +78,15 @@ function validatePayload(value,record){
     fields.push('handoverOffer');
     if(record.chainId!==31337)fail('FORMAT');
     validateOffer(value.handoverOffer);
+  }
+  if(value && Object.hasOwn(value,'inboundOffer')){
+    fields.push('inboundOffer');
+    if(record.chainId!==97)fail('FORMAT');
+    validateTestnetOffer(value.inboundOffer);
+    if(Object.hasOwn(value,'inboundHash')){
+      fields.push('inboundHash');
+      if(typeof value.inboundHash!=='string'||!/^0x[0-9a-f]{64}$/.test(value.inboundHash))fail('FORMAT');
+    }
   }
   if(!keys(value,fields)||!isHex(value.seed,64)||!Array.isArray(value.journal)||value.journal.length>MAX_RESERVATIONS)fail('FORMAT');
   const seen=new Set();

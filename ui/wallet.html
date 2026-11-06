@@ -61,9 +61,10 @@ node scripts/local-wallet.mjs</code></pre>
 <div class="demo-heading"><div><p class="eyebrow">BSC TESTNET / SMART ACCOUNT</p><h2 id="managedTitle">可复用测试账户</h2>
 <p>先解锁上方链 97 密钥库，再连接支付 Gas 的测试钱包。建户存入 3 wei 测试币。每次转账和轮换密钥都需要单独确认。</p></div></div>
 <button id="netConnect" type="button">连接测试网付款钱包</button>
-<div class="trial-form"><label>操作<select id="netKind"><option value="create">建户并存入 3 wei</option><option value="send">转出 1 wei</option><option value="rotate">轮换签名密钥</option><option value="fund">再存入 3 wei</option></select></label>
+<div class="trial-form"><label>操作<select id="netKind"><option value="create">建户并存入 3 wei</option><option value="send">转出 1 wei</option><option value="rotate">轮换签名密钥</option><option value="handover">交给新设备</option><option value="fund">再存入 3 wei</option></select></label>
 <label id="netAccountField" hidden>智能账户<select id="netAccount"></select></label>
 <label id="netToField" hidden>收款地址<input id="netTo" placeholder="0x…" maxlength="42" autocomplete="off"></label>
+<div id="netHandoverFields" hidden><label>新设备的公开请求<input id="netOffer" type="file" accept=".json,application/json"></label><label>独立核对的指纹<input id="netFingerprint" maxlength="32" autocomplete="off" spellcheck="false"></label><p>授权会停用本机这棵旧密钥树。提交中断后请找回原回执。</p></div>
 <button id="netPreview" type="button">预览操作</button></div>
 <div id="netReview" hidden><dl class="trial-values"><dt>操作</dt><dd id="netAction"></dd><dt>智能账户</dt><dd id="netAddress"></dd><dt>付款钱包</dt><dd id="netPayer"></dd><dt>双节点核对区块</dt><dd id="netCheckedBlock"></dd><dt id="netKeyStateLabel" hidden>链上密钥状态</dt><dd id="netKeyState" hidden></dd><dt>资金去向</dt><dd id="netDestination"></dd><dt>请求的手续费上限</dt><dd id="netFee"></dd></dl><button id="netConfirm" type="button" class="run">确认并打开付款钱包</button></div>
 <output id="netStatus" class="demo-status" aria-live="polite">仅供测试网研究。备份恢复后仅可查看。</output>
@@ -71,6 +72,14 @@ node scripts/local-wallet.mjs</code></pre>
 <label id="netManual" hidden>付款钱包里的交易哈希（可选）<input id="netHash" placeholder="0x…" maxlength="66"></label>
 <button id="netRotationExport" type="button" hidden>导出公开换根记录</button>
 <p id="netOutcome" aria-live="polite"></p><a id="netExplorer" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>在 BscScan 查看交易 ↗</a> <a id="netReplacement" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>查看占用该序号的交易 ↗</a> <a id="netOriginal" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>查看原始付款哈希 ↗</a></div>
+<div class="public-receipt" id="testnetHandover"><h3>在新设备接收测试账户</h3>
+<p>在新设备创建并解锁独立的链 97 密钥库。输入旧设备的智能账户地址，下载请求，并通过另一渠道向旧设备提供指纹。</p>
+<div class="trial-form"><label>待接收的账户<input id="receiveAddress" maxlength="42" placeholder="0x…" autocomplete="off" spellcheck="false"></label><button id="receivePrepare" type="button">下载接收请求</button></div>
+<dl class="trial-values"><dt>接收指纹</dt><dd id="receiveCode"></dd><dt>授权截止时间</dt><dd id="receiveExpiry"></dd></dl>
+<p>旧设备选择“交给新设备”并确认付款，然后从操作记录导出公开换根记录。在这里打开记录以启用新密钥。</p>
+<div class="trial-form"><label>公开换根记录<input id="receiveRecord" type="file" accept=".json,application/json"></label><label>换根交易哈希（可选）<input id="receiveHash" maxlength="66" placeholder="0x…" autocomplete="off" spellcheck="false"></label><button type="button" id="receiveAccept">核实并接收账户</button></div>
+<a class="activity-shortcut" href="#rotationRecovery">查找换根交易</a><output id="receiveStatus" aria-live="polite"></output>
+<div class="account-actions"><a class="activity-shortcut" target="_blank" rel="noopener noreferrer" href="https://testnet.bscscan.com/tx/0xd9a529c08102ec3e36b931af171edc78c438b87032bce0fd142a9ff8343c39d1">查看公开交接回执 ↗</a><a class="activity-shortcut" target="_blank" rel="noopener noreferrer" href="https://testnet.bscscan.com/tx/0xe73f994fce608776b2c01a48a96b1ee321b98e09793e9ae463947fd616feed8f">查看新设备首笔转账 ↗</a></div></div>
 <div class="public-receipt" id="publicReceipt"><div><h3>公开测试回执</h3><p>用两个测试网节点核对已发布的 1 wei 转账，无需连接钱包。</p></div>
 <div class="account-actions"><button id="netSample" type="button">核对公开回执</button><a class="activity-shortcut" href="https://testnet.bscscan.com/tx/0xd4375fec221a613bbe4caddc53fc04b00c6eb64214d5e5b87913b3f3e556a953" target="_blank" rel="noopener noreferrer">查看样例交易 ↗</a></div>
 <output id="netSampleResult" aria-live="polite"></output></div>

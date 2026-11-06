@@ -5,7 +5,7 @@ import {fail} from './vault-crypto.js';
 
 // Both journals have already passed authenticated decryption and schema validation.
 export function compareBackupJournal(saved, current) {
-  const fields = ['chainId', 'account', 'epoch', 'pubSeed', 'root', 'leaf', 'digest'];
+  const fields = ['chainId', 'account', 'epoch', 'pubSeed', 'root', 'leaf', 'digest', 'handoverOut'];
   if (saved.length > current.length) return 'different';
   let older = saved.length < current.length;
   for (const [index, row] of saved.entries()) {
@@ -17,10 +17,10 @@ export function compareBackupJournal(saved, current) {
   return older ? 'older' : 'matches';
 }
 
-export async function readRecoveryAccount({account, signal}) {
+export async function readRecoveryAccount({account, signal, tag='latest'}) {
   const timeout = AbortSignal.timeout(30000);
-  const clients = testnetClients(primaryTestnet, secondaryTestnet, AbortSignal.any([signal, timeout]));
-  const {aligned, conflict} = await alignedTestnetHeads(clients);
+  const clients = testnetClients(primaryTestnet, secondaryTestnet, signal ? AbortSignal.any([signal, timeout]) : timeout);
+  const {aligned, conflict} = await alignedTestnetHeads(clients,tag);
   if (conflict) fail('RECOVERY_CONFLICT');
   if (!aligned.every(Boolean)) fail('RECOVERY_NODES');
   let snapshots;

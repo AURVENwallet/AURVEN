@@ -49,7 +49,16 @@ Start the local wallet as above. Use two separate browser profiles on the same c
 3. In the original profile select **Original signer**, paste the request and enter the fingerprint obtained independently from the receiver. **Authorize handover and submit locally** signs a rotation on chain 31337. Keep the displayed transaction hash for reference.
 4. Wait for inclusion and one later local block. In the receiver choose **Check receipt and local key**. It can find the transaction by its event even after a reload. Follow **Continue to pairing and test signing** to simulate a transfer under the second key epoch.
 
-The receiver stores the request inside its encrypted vault and can unlock it again with its own password. The source reserves its rotation leaf before signing. If a submission is interrupted, check the receiver for a receipt. If there is still no receipt or the offer expired after reservation, restart the disposable launcher for a fresh rehearsal. A real handover requires a working original signer. Independent lost-device recovery and public-testnet handover remain open.
+The receiver stores the request inside its encrypted vault and can unlock it again with its own password. The source reserves its rotation leaf before signing. If a submission is interrupted, check the receiver for a receipt. If there is still no receipt or the offer expired after reservation, restart the disposable launcher for a fresh rehearsal. A real handover requires a working original signer. Independent authorization after losing the original signer remains open.
+
+### Move a BSC testnet account to another device
+
+1. On the receiving device, create and unlock a fresh chain-97 vault. Under **Receive a test account on this device**, enter the original smart account address and download the public request. Compare the displayed 32-character fingerprint over a separate trusted channel.
+2. On the source device, unlock the original vault. Select **Hand over to a new device**, choose the account and request file, and enter the independently confirmed fingerprint. Review the destination root and fee, then confirm using a faucet-funded payer. Reserving this authorization permanently stops this vault from issuing further signatures under the old root, including after a rejected payment or interrupted submission.
+3. Export the public rotation record from the source's history. On the receiver choose **Verify and accept account** with that record. If discovery needs more block ranges, use the receipt checker and paste the verified transaction hash. Both nodes must confirm the rotation and the currently active receiving root.
+4. Connect a testnet payer on the receiving device. Preview a one-wei transfer, verify the recipient and confirm. The account address stays the same. The gas payer can be shared between devices independently of their vaults.
+
+Each receiving vault holds one request for one account. Its authorization window is 30 minutes. An expired, unsigned request can be replaced using a fresh receiving vault. A rejected or never-mined payment after source reservation requires investigation with the original record. The browser has no automatic resend or unfreeze. Imported backups remain read-only. [Open the testnet device handover](https://aurven.site/wallet.html#testnetHandover).
 
 ### Recover a BSC testnet rotation receipt
 
@@ -280,7 +289,7 @@ BscTestAccount allows construction only on chains 97 and 31337; this restriction
 | Account creation and bootstrap | Disposable local demo completes direct deployment and bootstrap | Browser creation flow and BSC testnet deployment |
 | Seed generation, mnemonics and recovery | Local demo generates disposable public test seeds; browser custody remains pending | Encrypted storage, unlock and lock behavior, backup validation |
 | One-time key reservation | Local demo persists before signing and guards against concurrency within one process; webpage drafts do not reserve leaves | Cross-tab single-writer locking, crash and recovery tests |
-| Device handover and recovery reuse protection | Two-profile rotation drill on local Anvil | Public testnet confirmation policy, independent recovery and stale-copy detection remain open |
+| Device handover and recovery reuse protection | Two-profile handover with a finalized receipt check on BSC testnet | Independent lost-device recovery and full-profile rollback detection remain open |
 | Account state and network checks | Fixed-block reads from one RPC, with runtime checks | Comparison against a second source, retries, continued refresh and error reporting |
 | Transaction signing, fees and broadcasting | Local script completes signing, simulation and broadcasting; webpage checks actual receipts | Browser signing interface, BSC fee policy and public-testnet acceptance |
 | Pending transactions and cancellation | Pending | Rebroadcast the same signature, handle timeouts, manage transaction nonces and leaf indices separately |

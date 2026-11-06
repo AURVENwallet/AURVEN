@@ -1,3 +1,4 @@
+import {handoverFingerprint,validateNetworkPlan} from './vault-network-proof.js';
 import {networkGas,verifyNetworkPlanState} from './signing-preflight.js';
 import {accountRpc,readAccount} from './account-state.js';
 import {HASH} from './activity-rpc.js';
@@ -9,7 +10,7 @@ import {hex} from './test-wallet-core.js';
 
 export {networkReceipt};
 const badSignature='0x'+hex(keccak256(new TextEncoder().encode('BadSignature()'))).slice(0,8);
-export async function previewNetwork(endpoint,{walletId,payer,account,kind,recipient},secondary) {
+export async function previewNetwork(endpoint,{walletId,payer,account,kind,recipient,offer,fingerprint},secondary) {
   requireTrial(['create','send','rotate','fund'].includes(kind),'NET_PLAN');
   const value=kind==='create'||kind==='fund'?3n:0n;
   const gas=networkGas[kind];
@@ -26,9 +27,14 @@ export async function previewNetwork(endpoint,{walletId,payer,account,kind,recip
     requireTrial(/^0x[0-9a-f]{40}$/.test(account),'NET_ACCOUNT');
     plan.account=account;
   }
+  if(offer!==undefined){
+    requireTrial(kind==='rotate' && fingerprint===handoverFingerprint(offer),'HANDOVER_FINGERPRINT');
+    Object.assign(plan,{offer:structuredClone(offer),fingerprint,deadline:offer.deadline});
+  }
   const checked=await verifyNetworkPlanState(plan,endpoint,secondary);
   if (checked.snapshot) plan.snapshot=checked.snapshot;
   plan.reviewBlock=checked.reviewBlock;
+  if(plan.offer)validateNetworkPlan(plan);
   return plan;
 }
 export function needsReceiptCheck(row) {
@@ -43,7 +49,8 @@ export function retainNetworkHistory(rows,plan) {
   }
   const now=Date.now()/1000;
   function removable(row) {
-    if (needsReceiptCheck(row)) return false;
+    // The other device may still need to export this exact handover record.
+    if ((row.offer && row.dataHash) || needsReceiptCheck(row)) return false;
     if (['declined','stopped','reverted','replaced','expired'].includes(row.status)) return true;
     if (row.status==='preparing' && row.deadline<=now) return true;
     return row.status==='included' && row.kind!=='create';

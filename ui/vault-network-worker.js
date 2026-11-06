@@ -20,7 +20,7 @@ self.onmessage=async({data:{id,type,payload}})=>{
     const master=fromHex((await decryptPayload(record,key)).seed);
     let source,successor;
     try {
-      const buildingTwo=plan.kind!=='send', startup=setup(plan.kind);
+      const buildingTwo=plan.kind!=='send' && !plan.offer, startup=setup(plan.kind);
       const build=(seeds,second)=>EvmTreeKey.generate(seeds.skSeed,seeds.pubSeed,p=>
         self.postMessage({id,progress:buildingTwo?(second?0.5:0)+p/2:p}));
       // The bootstrap key exists only in this worker. Subsequent trees belong to the encrypted vault.
@@ -31,6 +31,7 @@ self.onmessage=async({data:{id,type,payload}})=>{
       const tree=build(source,false);
       if (!startup && '0x'+hex(tree.root)!==plan.snapshot.root) fail('NET_KEYS');
       const intent={leaf,seed:hex(tree.pubSeed),root:hex(tree.root),rnd:hex(random(16))};
+      if(plan.offer){intent.newSeed=plan.offer.newSeed.slice(2);intent.newRoot=plan.offer.newRoot.slice(2);}
       if (buildingTwo) {
         successor=testActiveSeeds(master,97,plan.account,(plan.snapshot?.epoch??0)+1,random(16));
         const next=build(successor,true);intent.newSeed=hex(next.pubSeed);intent.newRoot=hex(next.root);

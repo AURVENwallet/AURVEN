@@ -15,7 +15,8 @@
 .trial-values dt{color:#b4ad9d}.trial-values dd{margin:0;overflow-wrap:anywhere;font:14px var(--mono);color:#f3d68b}.trial-panel [hidden]{display:none!important}
 .trial-panel output,.trial-panel #trialOutcome{display:block;overflow-wrap:anywhere}.trial-panel #trialHistory{border-top:1px solid #ffffff24;margin-top:20px}
 @media(max-width:600px){.trial-form{align-items:stretch}.trial-form>*{flex:1 1 100%}.trial-values{grid-template-columns:1fr;gap:4px}.trial-values dd{margin-bottom:8px}}
-#rotationRecovery .trial-form>*{min-width:0}
+#rotationRecovery .trial-form>*,#testnetHandover .trial-form>*,#netHandoverFields{min-width:0}
+#netHandoverFields{flex:1 1 100%}#netHandoverFields label+label{margin-top:10px}
 #rotationRecovery input{max-width:100%;box-sizing:border-box}
 #rotationExplorer{overflow-wrap:anywhere}
 

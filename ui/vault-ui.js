@@ -6,7 +6,7 @@ const el=id=>document.getElementById(id);
 const sessionId=document.querySelector('meta[name="aurven-local-session"]')?.content;
 const sandboxStore=location.hostname==='127.0.0.1' && /^[a-f0-9]{32}$/.test(sessionId) ? 'aurven-sandbox-'+sessionId : undefined;
 const status=el('vaultStatus');
-let checkedBackupRevision, candidateList;
+let checkedBackupRevision, candidateList, lastReceivedAccount;
 let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
   HANDOVER_RECEIPT:'未能核实规范区块中的换根回执。',
@@ -93,6 +93,8 @@ function render(){
   el('vaultLock').disabled=!unlocked;
   renderProof();
   renderAccountCheck();
+  const received=receivedTestnetAccount();
+  if(received!==lastReceivedAccount){lastReceivedAccount=received;document.dispatchEvent(new Event('aurven:received-account'));}
 }
 function renderAccountCheck(){
   const result=vault?.accountCheck;
@@ -164,6 +166,12 @@ export const walletDraftActions = {
 export function networkWalletId() {
   if (!vault?.unlocked || vault.details.mode!=='active' || vault.details.chainId!==97) throw new Error('NET_VAULT');
   return vault.details.walletId;
+}
+export const receivedTestnetAccount=()=>vault?.receivedAccount??null;
+export async function receiveTestnetHandover(account,record,hash){
+  networkWalletId();
+  try{return record?await vault.acceptTestnetHandover(record,hash):await vault.prepareTestnetHandover(account);}
+  finally{details=await vault.inspect();render();}
 }
 export async function authorizeNetwork(plan,progress) {
   networkWalletId();

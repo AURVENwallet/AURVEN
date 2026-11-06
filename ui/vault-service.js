@@ -1,15 +1,16 @@
 import {VaultError,fail,hex,createEnvelope,validateEnvelope,parseBackup,deriveVaultKey,decryptPayload,
-  encryptPayload,validateReservation,reservationId,MAX_RESERVATIONS} from './vault-crypto.js';
+  encryptPayload,validateReservation,reservationId,validateTestnetOffer,MAX_RESERVATIONS} from './vault-crypto.js';
 import {ProofWorkerClient} from './proof-worker-client.js';
 import {LOCAL_PROOF_FORMAT,PROOF_ACCOUNT,validateProofMessage,proofDigest,verifyLocalProof,proofTreeState} from './local-proof.js';
 import {readAccount} from './account-state.js';
 import {validateReviewDraft,compareDraftAccount,compareDraftState,nextTransferLeaf} from './draft-preflight.js';
 import {localSimulationEndpoint,reservedRow,simulateLocalProof} from './local-transfer.js';
 import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
-import {encodeNetworkAction,setup,spendingLeaf,validateIntent,validateNetworkPlan} from './vault-network-proof.js';
+import {encodeNetworkAction,setup,spendingLeaf,validateIntent,validateNetworkPlan,matchOffer} from './vault-network-proof.js';
 import {verifyNetworkPlanState} from './signing-preflight.js';
 import {compareBackupJournal, readRecoveryAccount, recoveryJournalReview} from './backup-recovery.js';
 import {checkSource,confirmLocalHandover,offerFingerprint,readHandoverState,rotationMessage,sendLocalRotation} from './local-handover.js';
+import {recoverTestnetRotation,validateRotationRecord} from './testnet-rotation.js';
 import {EXEC_LIMIT} from './lib/evmwots.js';
 
 export class TestVault {
@@ -19,7 +20,7 @@ export class TestVault {
   #reserved;#simulationAbort;
   #networkWorker;
   #handoverWorker;#handoverOffer;#localSandbox;
-  #recoveredAccounts=[];
+  #recoveredAccounts=[];#inbound;
   constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
     bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,recoveryReader=readRecoveryAccount,networkPreflight=verifyNetworkPlanState,
     transferWorkerFactory=()=>new ProofWorkerClient(new URL('./local-transfer-worker.js',import.meta.url)),
@@ -34,6 +35,7 @@ export class TestVault {
   get unlocked(){if(this.#key&&this.now()>=this.#deadline)this.lock('idle');return !!this.#key;}
   get details(){return this.#details?{...this.#details,unlocked:this.unlocked}:null;}
   get recoveredAccounts(){return this.unlocked ? [...this.#recoveredAccounts] : [];}
+  get receivedAccount(){return this.unlocked && this.#inbound?.hash ? this.#inbound.offer.account : null;}
   get receivingOffer(){return this.unlocked&&this.#handoverOffer?{...this.#handoverOffer}:null;}
   touch(){
     if(!this.#key)return;
@@ -42,7 +44,7 @@ export class TestVault {
   }
   #arm(){clearTimeout(this.#timer);this.#deadline=this.now()+this.idleMs;this.#timer=setTimeout(()=>this.lock('idle'),this.idleMs);this.#timer.unref?.();}
   lock(reason='manual'){
-    this.#handoverOffer=undefined;
+    this.#inbound=undefined;this.#handoverOffer=undefined;
     this.#handoverWorker?.dispose();this.#handoverWorker=undefined;
     this.#recoveredAccounts=[];
     this.#networkWorker?.dispose();this.#networkWorker=undefined;
@@ -54,9 +56,11 @@ export class TestVault {
   #capture(){if(!this.unlocked)fail('LOCKED');return {key:this.#key,generation:this.#generation,id:this.#walletId};}
   #check(context){if(!this.unlocked||context.generation!==this.#generation||context.id!==this.#walletId)fail('LOCKED');}
   #setDetails(record,payload){
+    this.#inbound=record.mode==='active' && payload?.inboundOffer?{offer:payload.inboundOffer,hash:payload.inboundHash}:undefined;
     this.#handoverOffer=this.#localSandbox&&record.mode==='active'?payload?.handoverOffer:undefined;
     this.#recoveredAccounts=record.mode==='recovery-readonly' && record.chainId===97 && payload ?
-      [...new Set(payload.journal.map(row=>row.account).filter(account=>account!==PROOF_ACCOUNT))] : [];
+      [...new Set([...payload.journal.map(row=>row.account).filter(account=>account!==PROOF_ACCOUNT),
+        ...(payload.inboundHash?[payload.inboundOffer.account]:[])])] : [];
     this.#details={walletId:record.walletId,chainId:record.chainId,createdAt:record.createdAt,mode:record.mode,
       revision:record.revision,reservations:payload?.journal.length??null};
   }
@@ -134,7 +138,11 @@ export class TestVault {
       try{saved=await decryptPayload(backup,context.key);}catch{fail('BACKUP_INVALID');}
       this.#check(context);
       if(saved.seed!==payload.seed)fail('BACKUP_SOURCE');
-      return {status:compareBackupJournal(saved.journal,payload.journal),savedCount:saved.journal.length,
+      let status=compareBackupJournal(saved.journal,payload.journal);
+      if(saved.inboundOffer && (!payload.inboundOffer || Object.keys(saved.inboundOffer).some(k=>saved.inboundOffer[k]!==payload.inboundOffer[k])) ||
+         saved.inboundHash && saved.inboundHash!==payload.inboundHash)status='different';
+      else if(status==='matches' && ((!saved.inboundOffer && payload.inboundOffer) || (!saved.inboundHash && payload.inboundHash)))status='older';
+      return {status,savedCount:saved.journal.length,
         currentCount:payload.journal.length,checkedRevision:record.revision};
     });
   }
@@ -286,6 +294,59 @@ export class TestVault {
     });
   }
   get accountCheck(){return this.unlocked&&this.#bindingResult?structuredClone(this.#bindingResult):null;}
+  async #saveInbound(context,record,payload){
+    const updated=await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
+    this.#check(context);await this.store.compareAndSwap(record,updated);this.#check(context);
+    this.#remember(updated);this.#revision=updated.revision;this.#setDetails(updated,payload);
+  }
+  async prepareTestnetHandover(account){
+    const context=this.#capture();
+    if(typeof account!=='string'||!/^0x[0-9a-f]{40}$/.test(account))fail('NET_ACCOUNT');
+    return this.#exclusive(async()=>{
+      const {record,payload}=await this.#load(context);
+      if(record.chainId!==97 || record.mode!=='active')fail('RECOVERY');
+      if(payload.inboundOffer){
+        if(payload.inboundOffer.account!==account)fail('HANDOVER_FRESH');
+        return {...payload.inboundOffer};
+      }
+      if(payload.journal.length)fail('HANDOVER_FRESH');
+      const state=await this.recoveryReader({account,tag:'finalized'});this.#check(context);
+      if(state.epoch<1 || state.epoch>=0xffffffff)fail('HANDOVER_OFFER');
+      const worker=this.bindingWorkerFactory();this.#handoverWorker=worker;
+      try{
+        const derive=snapshot=>worker.request('check',{record,key:context.key,snapshot});
+        const old=await derive(state);this.#check(context);
+        if(validateDerivedRoot(old,record,state).root===state.root)fail('HANDOVER_FRESH');
+        const next={...state,epoch:state.epoch+1,pubSeed:'0x'+hex(crypto.getRandomValues(new Uint8Array(16)))};
+        const derived=await derive(next);this.#check(context);
+        validateDerivedRoot(derived,record,next);
+        const offer=validateTestnetOffer({format:'aurven-testnet-handover-v1',chainId:97,account,epoch:state.epoch,
+          oldSeed:state.pubSeed,oldRoot:state.root,newSeed:next.pubSeed,newRoot:derived.root,deadline:state.timestamp+1800});
+        payload.inboundOffer=offer;
+        await this.#saveInbound(context,record,payload);
+        return {...offer};
+      }finally{worker.dispose();if(this.#handoverWorker===worker)this.#handoverWorker=undefined;}
+    });
+  }
+  async acceptTestnetHandover(publicRecord,hash){
+    const context=this.#capture(),receipt=validateRotationRecord(structuredClone(publicRecord));
+    return this.#exclusive(async()=>{
+      const {record,payload}=await this.#load(context);
+      if(record.chainId!==97 || record.mode!=='active')fail('RECOVERY');
+      matchOffer(payload.inboundOffer,receipt);
+      const result=await recoverTestnetRotation(receipt,{txHash:hash});
+      this.#check(context);
+      if(['continue','not-found'].includes(result.status))fail('HANDOVER_SEARCH');
+      if(result.status!=='current' || result.root!==payload.inboundOffer.newRoot ||
+         result.epoch!==payload.inboundOffer.epoch+1)fail('HANDOVER_PENDING');
+      if(payload.inboundHash && payload.inboundHash!==result.hash)fail('HANDOVER_RECEIPT');
+      if(!payload.inboundHash){
+        payload.inboundHash=result.hash;
+        await this.#saveInbound(context,record,payload);
+      }
+      return result;
+    });
+  }
   async authorizeNetworkAction(input,progress) {
     const context=this.#capture(),plan=structuredClone(input);
     validateNetworkPlan(plan);
@@ -300,6 +361,16 @@ export class TestVault {
       if (record.mode!=='active' || record.chainId!==97) fail('RECOVERY');
       if (payload.journal.length>=MAX_RESERVATIONS) fail('FULL');
       await fresh();
+      if(plan.offer && payload.journal.some(row=>row.root===plan.offer.oldRoot.slice(2) && row.leaf>=EXEC_LIMIT))fail('HANDOVER_RETIRED');
+      const inbound=payload.inboundOffer;
+      const checkInbound=async()=>{
+        if(!inbound || inbound.account!==plan.account)return;
+        if(!payload.inboundHash || !plan.snapshot || plan.snapshot.epoch<=inbound.epoch)fail('HANDOVER_PENDING');
+        const state=await this.recoveryReader({account:plan.account,tag:'finalized'});this.#check(context);
+        if(!keyStateEqual(state,plan.snapshot) || (state.epoch===inbound.epoch+1 &&
+          (state.root!==inbound.newRoot || state.pubSeed!==inbound.newSeed)))fail('HANDOVER_PENDING');
+      };
+      await checkInbound();
       const leaf=spendingLeaf(plan,payload.journal),worker=this.networkWorkerFactory();
       this.#networkWorker=worker;
       let reserved=false;
@@ -307,10 +378,10 @@ export class TestVault {
         const intent=await worker.request('prepare',{record,key:context.key,plan,leaf},progress);
         this.#check(context);validateIntent(plan,intent,leaf);
         const row=validateReservation({chainId:97,account:plan.account,epoch:plan.snapshot?.epoch??0,
-          pubSeed:intent.seed,root:intent.root,leaf,digest:intent.digest});
+          pubSeed:intent.seed,root:intent.root,leaf,digest:intent.digest,...(plan.offer?{handoverOut:true}:{})});
         if (payload.journal.some(entry=>reservationId(entry)===reservationId(row))) fail('USED');
         if (intent.newRoot && payload.journal.some(entry=>entry.root===intent.newRoot)) fail('NET_KEYS');
-        await fresh();
+        await fresh();await checkInbound();
         payload.journal.push(row);
         const updated=await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
         this.#check(context);await this.store.compareAndSwap(record,updated);reserved=true;this.#check(context);
@@ -323,7 +394,7 @@ export class TestVault {
             if (!response.ok) fail('NET_PROOF');
             init=await response.json();
           }
-          await fresh();
+          await fresh();await checkInbound();
           return {data:encodeNetworkAction(plan,intent,proof,init),intent};
         } finally {proof.fill(0);}
       } catch (error) {

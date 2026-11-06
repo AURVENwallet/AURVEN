@@ -1,5 +1,6 @@
 import {secondaryTestnet as secondary} from './testnet-heads.js';
-import {networkWalletId,authorizeNetwork} from './vault-ui.js';
+import {handoverFingerprint} from './vault-network-proof.js';
+import {networkWalletId,authorizeNetwork,receivedTestnetAccount,receiveTestnetHandover} from './vault-ui.js';
 import {openVaultStore} from './vault-store.js';
 import {trialEndpoint,payerAccount,inTbnb} from './browser-trial.js';
 import {previewNetwork,submitNetwork,reconcileNetwork,needsReceiptCheck,checkOldApproval} from './network-account.js';
@@ -22,7 +23,11 @@ const kinds={create:'建户并存入 3 wei',send:'转出 1 wei',rotate:'轮换�
 const states={pending:'付款钱包已提交，当前节点仍在等待打包。',unseen:'当前节点未找到这笔交易。请稍后再核对，或从付款钱包复制交易哈希。',
   replaced:'相同付款序号已被另一笔不同内容的交易使用。',reorg:'原回执所在区块已被替换，当前链上尚未核实这笔操作。',
   expired:'截至核对区块未发现已打包的付款，签名授权已过期。',preparing:'准备中',requested:'等待核对付款结果',waiting:'等待链上回执。',included:'交易回执已核对',declined:'付款请求已取消。',stopped:'准备已停止，尚未请求付款。',reverted:'交易已打包，但执行失败。'};
-const errors={NET_PREFLIGHT_UNAVAILABLE:'未能从两个测试网节点核实签名前状态，请稍后重新预览。',
+const errors={HANDOVER_OFFER:'交接请求与账户、密钥或授权有效期不符。',HANDOVER_FINGERPRINT:'指纹不一致，请通过另一渠道向新设备核对。',
+  HANDOVER_FRESH:'请使用全新、独立的链 97 密钥库接收该账户。',HANDOVER_RETIRED:'旧密钥已预留换根授权，请核对原回执。',
+  HANDOVER_PENDING:'尚未核实本机接收密钥已最终生效，请核对回执后重试。',HANDOVER_RECEIPT:'换根记录与已保存的交接不同。',
+  HANDOVER_SEARCH:'请先在下方找回换根交易，再填入查到的哈希。',HANDOVER_FILE:'请选择对应的公开交接文件。',ROTATION_FILE:'请选择有效的测试网公开换根记录。',
+  ROTATION_NODES:'两个节点未能同时提供已最终确认的区块。',ROTATION_CONFLICT:'两个节点的记录不一致，本次无法确认换根。',NET_PREFLIGHT_UNAVAILABLE:'未能从两个测试网节点核实签名前状态，请稍后重新预览。',
   NET_PREFLIGHT_STATE:'两个节点报告的账户状态不同，请稍后重新预览。',
   NET_PREFLIGHT_FORK:'两个节点无法确认同一区块，请稍后重新预览。',NET_SETUP_OCCUPIED:'预计的建户地址已被占用，请重新预览。',
   NET_ACCOUNT_CHECK:'请重新核对建户回执，两个节点一致后再继续。',NET_CHECK_AGAIN:'另一处已更新此记录，请重新核对。',NET_UNVERIFIED:'本次核对未取得一致的链上证据，请稍后重试。',
@@ -36,7 +41,7 @@ const errors={NET_PREFLIGHT_UNAVAILABLE:'未能从两个测试网节点核实签
   NET_EXHAUSTED:'当前密钥的可用叶号已耗尽。',TRIAL_HASH:'该哈希与本次试转不符。',TRIAL_FULL:'本浏览器已达到 32 条试转记录上限。',
   TRIAL_PROVIDER:'请在支持浏览器钱包的网站环境中打开此页。',TRIAL_PAYER:'付款账户已改变，请重新连接。',TRIAL_CHAIN:'请先在付款钱包中切换到 BSC 测试网（97）。',
   TRIAL_NONCE:'付款钱包有其他交易，请等待确认并重新预览。',TRIAL_BALANCE:'付款钱包的测试币不足以覆盖本金和手续费上限。',TRIAL_RECIPIENT:'试转需要普通付款钱包和有效的普通收款地址。'};
-let store,payer,plan,records=[],busy=false;
+let store,payer,plan,records=[],busy=false,receiveFeedback=false;
 const storage=async()=>store??=await openVaultStore('aurven-vault-network-actions-v1');
 const selected=()=>records.find(r=>r.id===el('netRecords').value);
 function reset(){plan=undefined;el('netReview').hidden=true;}
@@ -54,6 +59,8 @@ function checkMessage(check) {
 }
 function render(){
   const kind=el('netKind').value,row=selected();
+  el('netHandoverFields').hidden=kind!=='handover';
+  for(const id of ['netOffer','netFingerprint','receiveAddress','receivePrepare','receiveRecord','receiveHash','receiveAccept'])el(id).disabled=busy;
   el('netAccountField').hidden=kind==='create';el('netToField').hidden=kind!=='send';
   for (const id of ['netConnect','netKind','netAccount','netTo','netRecords','netHash']) el(id).disabled=busy;
   el('netPreview').disabled=busy||!payer;el('netConfirm').disabled=busy||!plan;
@@ -92,16 +99,22 @@ function options(select,items,preferred) {
 }
 async function refresh(preferred){
   records=(await (await storage()).read())?.rows??[];
-  options(el('netRecords'),records.toReversed().map(r=>[r.id,kinds[r.kind]+' · '+r.account.slice(0,10)+' · nonce '+BigInt(r.nonce)]),preferred);
-  options(el('netAccount'),records.filter(r=>r.kind==='create'&&r.status==='included'&&!needsReceiptCheck(r)).map(r=>[r.account,r.account]));
+  options(el('netRecords'),records.toReversed().map(r=>[r.id,(r.offer?'交给新设备':kinds[r.kind])+' · '+r.account.slice(0,10)+' · nonce '+BigInt(r.nonce)]),preferred);
+  listAccounts();
   render();
 }
-const status=s=>{el('netStatus').textContent=s;};
-async function action(fn){
+function listAccounts(){
+  const accounts=records.filter(r=>r.kind==='create' && r.status==='included' && !needsReceiptCheck(r)).map(r=>r.account);
+  const received=receivedTestnetAccount();if(received)accounts.push(received);
+  options(el('netAccount'),[...new Set(accounts)].map(a=>[a,a]));
+}
+document.addEventListener('aurven:received-account',()=>{reset();listAccounts();render();});
+const status=s=>{el('netStatus').textContent=s;if(receiveFeedback)el('receiveStatus').textContent=s;};
+async function action(fn,receiving=false){
   if(busy)return;
-  busy=true;render();
+  busy=true;receiveFeedback=receiving;render();
   try{await fn();}catch(e){status(e.code===4001?states.declined:errors[e.code??e.message]??'操作未完成，请查看试转记录并核对网络。');}
-  finally{busy=false;render();}
+  finally{busy=false;receiveFeedback=false;render();}
 }
 async function check(row,hash){
   reset();
@@ -123,15 +136,16 @@ async function check(row,hash){
 }
 el('netConnect').onclick=()=>action(async()=>{reset();payer=await payerAccount(window.ethereum,true);if(!el('netTo').value)el('netTo').value=payer;status('已连接付款钱包 · '+payer);});
 el('netPreview').onclick=()=>action(async()=>{
-  reset();const walletId=networkWalletId(),kind=el('netKind').value,account=el('netAccount').value;
-  if (kind!=='create' && !records.some(r=>r.kind==='create'&&r.walletId===walletId&&r.account===account&&r.status==='included'&&!needsReceiptCheck(r))) throw new Error('NET_ACCOUNT');
+  reset();const walletId=networkWalletId(),isHandover=el('netKind').value==='handover',kind=isHandover?'rotate':el('netKind').value,account=el('netAccount').value;
+  if (kind!=='create' && account!==receivedTestnetAccount() && !records.some(r=>r.kind==='create'&&r.walletId===walletId&&r.account===account&&r.status==='included'&&!needsReceiptCheck(r))) throw new Error('NET_ACCOUNT');
   if (await payerAccount(window.ethereum)!==payer) throw new Error('TRIAL_PAYER');
-  plan=await previewNetwork(endpoint,{walletId,payer,account,kind,recipient:el('netTo').value.trim()});
+  const extra=isHandover?{offer:await readFile('netOffer'),fingerprint:el('netFingerprint').value.trim().toLowerCase()}:{};
+  plan=await previewNetwork(endpoint,{walletId,payer,account,kind,recipient:el('netTo').value.trim(),...extra});
   el('netCheckedBlock').textContent='#'+BigInt(plan.reviewBlock.number);
   el('netKeyStateLabel').hidden=el('netKeyState').hidden=!plan.snapshot;
   if (plan.snapshot) el('netKeyState').textContent='密钥代数 '+plan.snapshot.epoch+' · 链上起始叶号 '+plan.snapshot.next;
-  el('netAction').textContent=kinds[kind];el('netAddress').textContent=plan.account;el('netPayer').textContent=payer;
-  el('netDestination').textContent=kind==='rotate'?'仅轮换密钥':(kind==='send'?plan.recipient+' · 1 wei':plan.account+' · 3 wei');
+  el('netAction').textContent=isHandover?'交给新设备':kinds[kind];el('netAddress').textContent=plan.account;el('netPayer').textContent=payer;
+  el('netDestination').textContent=isHandover?plan.offer.newRoot+' · '+plan.fingerprint:kind==='rotate'?'仅轮换密钥':(kind==='send'?plan.recipient+' · 1 wei':plan.account+' · 3 wei');
   el('netFee').textContent=inTbnb(BigInt(plan.gas)*BigInt(plan.gasPrice));
   el('netReview').hidden=false;status('请核对地址和费用，再打开付款钱包确认。');
 });
@@ -172,6 +186,29 @@ el('netRotationExport').onclick=()=>{
     status('公开记录已导出，可在另一浏览器核对回执。');
   }catch{status('这条历史记录缺少核对换根所需的字段。');}
 };
-for (const id of ['netKind','netAccount','netTo']) el(id).addEventListener('input',()=>{reset();render();});
+async function readFile(id){
+  const file=el(id).files[0];
+  if(!file || file.size>4096)throw new Error('HANDOVER_FILE');
+  try{return JSON.parse(await file.text());}catch{throw new Error('HANDOVER_FILE');}
+}
+el('receivePrepare').onclick=()=>action(async()=>{
+  el('receiveCode').textContent='';el('receiveExpiry').textContent='';status('正在生成接收请求…');
+  const offer=await receiveTestnetHandover(el('receiveAddress').value.trim().toLowerCase());
+  const url=URL.createObjectURL(new Blob([JSON.stringify(offer,null,2)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='aurven-handover-request.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  el('receiveCode').textContent=handoverFingerprint(offer);
+  el('receiveExpiry').textContent=new Date(offer.deadline*1000).toISOString();
+  status(offer.deadline<=Date.now()/1000?'请求已过期。如旧设备已授权，请核对原回执。':'接收请求已导出，请单独传递指纹。');
+},true);
+el('receiveAddress').addEventListener('input',()=>{el('receiveCode').textContent='';el('receiveExpiry').textContent='';el('receiveStatus').textContent='';});
+el('receiveAccept').onclick=()=>action(async()=>{
+  status('正在核对两个节点的换根回执…');
+  const receipt=await readFile('receiveRecord');
+  if(!receipt)throw new Error('HANDOVER_FILE');
+  const result=await receiveTestnetHandover(null,receipt,el('receiveHash').value.trim().toLowerCase());
+  await refresh();el('netKind').value='send';el('netAccount').value=result.account;reset();render();
+  status('新设备已接收账户，可预览 1 wei 测试转账。');
+},true);
+for (const id of ['netKind','netAccount','netTo','netOffer','netFingerprint']) el(id).addEventListener('input',()=>{reset();render();});
 for (const evt of ['accountsChanged','chainChanged']) window.ethereum?.on?.(evt,()=>{payer=undefined;reset();render();});
 refresh().catch(()=>status('请检查浏览器是否允许本地存储。'));
