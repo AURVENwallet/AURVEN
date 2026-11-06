@@ -1,6 +1,6 @@
 # Key trees, reservations and recovery
 
-This describes the current experimental implementation, not an audited security guarantee. The browser can sign verification-only messages using a separate self-check tree. Transaction signing and independent recovery authorization are not implemented. Use only disposable local/testnet keys.
+The browser signs self-check messages using a separate tree and can sign a reserved transfer for simulation on disposable local Anvil. Public-testnet transaction submission and independent recovery authorization remain open. Use only disposable local/testnet keys.
 
 ## Tree structure
 
@@ -88,4 +88,4 @@ Node tests exercise encryption, tampering, import bounds, lock deadlines, concur
 
 To run browser checks, copy `test/browser/vault-checks.html` and `test/browser/vault-checks.js` into ignored `ui/demo/`, serve only `ui/` over loopback, then open `/demo/vault-checks.html` and click **Run storage checks**. The harness uses unique disposable database names and never opens the primary wallet database. Remove only these two copied files when done; retain any unrelated local demo files.
 
-The self-check has worker-based generation and validated message/key context; the account root checker now reconstructs identity/active trees for read-only comparison. Remaining gates before browser transaction signing include transaction-specific fresh account/key binding, signed-payload persistence and reconciliation, historical-root rejection, defined power-loss and device-handover behavior, independent recovery design, public-testnet gas validation and specialist cryptographic/security review.
+The self-check uses worker-based generation and validates the message and key context. The account root checker reconstructs identity and active trees for read-only comparison. For local simulation the browser also revalidates the account and journal before releasing a signature. Public-testnet submission requires durable signed-payload persistence and reconciliation. Historical-root rejection, power-loss and device-handover behavior, independent recovery, mined public-testnet receipts and specialist review remain open. See the [release gates and gas observations](MAINNET_READINESS.md).

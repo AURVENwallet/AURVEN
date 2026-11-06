@@ -15,8 +15,9 @@ export async function pinnedRuntime() {
 }
 
 // Never accepts a caller-supplied RPC. The port comes from this child process.
-export async function startLocalNode(origin, blockTime=0) {
-  const args = ['--host','127.0.0.1','--port','0','--accounts','0','--chain-id','31337','--color','never'];
+export async function startLocalNode(origin, blockTime=0, chainId=31337) {
+  if (![31337,97].includes(chainId)) throw new Error('Expected a local or testnet chain ID.');
+  const args = ['--host','127.0.0.1','--port','0','--accounts','0','--chain-id',String(chainId),'--color','never'];
   if (origin) args.push('--allow-origin',origin);
   else args.push('--no-cors');
   if (blockTime) args.push('--block-time',String(blockTime));

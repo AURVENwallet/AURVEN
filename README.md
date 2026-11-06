@@ -10,6 +10,8 @@ Experimental hash-signature smart accounts for BSC, with a Chinese / English int
 
 **Local and testnet research only. Do not use with real assets. No independent security audit or validated quantum-security claim.** See [security checks and limitations](SECURITY.md).
 
+See [BSC wallet release readiness](docs/MAINNET_READINESS.md) for measured public-testnet gas, the testnet trial plan and the conditions for a real-asset release.
+
 ## Quick start
 
 ### Start a disposable wallet
