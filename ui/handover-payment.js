@@ -15,6 +15,22 @@ function paymentContext(plan,dataHash){
     plan.startBlock,plan.reviewBlock?.number,plan.reviewBlock?.hash,s.epoch,s.next,s.root,s.pubSeed,s.codeHash,
     s.balanceWei,plan.fingerprint,plan.deadline,dataHash]));
 }
+// The fee context and digest are committed before the worker may sign. Recovery can only reproduce that digest.
+export function handoverBinding(plan){
+  return hashBytes('0x'+hex(paymentContext(plan,'reserved-intent-v1')));
+}
+export function reservedHandoverIntent(plan,journal){
+  validateNetworkPlan(plan);
+  if(!plan.offer)fail('REPAIR_MISSING');
+  const binding=handoverBinding(plan);
+  const row=journal.find(r=>r.handoverOut && r.commitment?.binding===binding);
+  if(!row)fail('REPAIR_MISSING');
+  if(row.chainId!==97 || row.account!==plan.account || row.epoch!==plan.snapshot.epoch)fail('RETRY_INVALID');
+  const intent={leaf:row.leaf,seed:row.pubSeed,root:row.root,newSeed:plan.offer.newSeed.slice(2),
+    newRoot:plan.offer.newRoot.slice(2),digest:row.digest,salt:row.commitment.salt,rnd:row.commitment.rnd};
+  validateIntent(plan,intent,row.leaf);
+  return intent;
+}
 export async function sealHandoverPayment(key,plan,data){
   const iv=crypto.getRandomValues(new Uint8Array(12)),dataHash=hashBytes(data);
   const bytes=fromHex(data.slice(2));

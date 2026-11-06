@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {rootFromProof,PROOF_LEN} from '../ui/lib/evmwots.js';
-import {retainNetworkHistory} from '../ui/network-account.js';
+import {reservedHandoverIntent} from '../ui/handover-payment.js';
+import {retainNetworkHistory,repairInterruptedHandover,canRepairHandover} from '../ui/network-account.js';
 import {TestVault} from '../ui/vault-service.js';
 import {decryptPayload,validateOffer,validateTestnetOffer} from '../ui/vault-crypto.js';
 import {handoverFingerprint,matchOffer,networkHasher,validateNetworkPlan} from '../ui/vault-network-proof.js';
@@ -128,17 +129,66 @@ test('an interrupted payment reopens only the original authenticated bytes after
   assert.equal(signs,1);assert.equal(vault.details.reservations,1);
 });
 
-test('a failed signed-payment save burns the leaf without releasing an authorization',async t=>{
+function historyFor(plan){
+  let history={rows:[{...plan,status:'stopped'}]};
+  return {read:async()=>history,compareAndSwap:async(old,next)=>{assert.equal(history,old);history=next;}};
+}
+const locks={request:(_name,_opts,work)=>work({})};
+
+test('a lost payment save can only reconstruct the original authorization under its committed leaf',async t=>{
   const proof=new Uint8Array(PROOF_LEN);
   const intent={leaf:960,seed:offer.oldSeed.slice(2),newSeed:offer.newSeed.slice(2),newRoot:offer.newRoot.slice(2),salt:0,rnd:'cd'.repeat(16)};
   const digest=networkHasher(rotation,intent)(0);intent.digest=hex(digest);
   intent.root=hex(rootFromProof(Buffer.from(intent.seed,'hex'),960,digest,proof));
   const target={...offer,oldRoot:'0x'+intent.root};
-  const {vault}=fixture({networkWorkerFactory:()=>({dispose(){},request:async type=>type==='sign'?proof.slice():intent})});
-  t.after(()=>vault.lock());const {walletId}=await vault.create(crypto.randomUUID(),97);
-  const plan={...rotation,walletId,offer:target,snapshot:{...snapshot,root:target.oldRoot},fingerprint:handoverFingerprint(target)};
-  const save=async()=>{throw Error('storage failed');};
+  let firstHash,repairs=0;
+  const {vault,store}=fixture({networkWorkerFactory:()=>({dispose(){},async request(type,payload){
+    if(type==='prepare')return intent;
+    if(type==='repair'){
+      const {journal}=await decryptPayload(payload.record,payload.key);
+      assert.deepEqual(reservedHandoverIntent(payload.plan,journal),intent);repairs++;
+    }else assert.equal(type,'sign');
+    return proof.slice();
+  }})});
+  t.after(()=>vault.lock());
+  const password=crypto.randomUUID(),{walletId}=await vault.create(password,97);
+  const plan={...rotation,id:crypto.randomUUID(),walletId,offer:target,snapshot:{...snapshot,root:target.oldRoot},
+    fingerprint:handoverFingerprint(target),nonce:'0x3',gas:'0xaae60',gasPrice:'0x2',startBlock:'0x30',
+    reviewBlock:{number:snapshot.blockNumber,hash:snapshot.blockHash},repairVersion:1};
+  const save=async entry=>{firstHash=entry.dataHash;throw Error('storage failed');};
   await assert.rejects(vault.authorizeNetworkAction(plan,undefined,save),e=>e.message==='storage failed' && e.leafReserved);
   await assert.rejects(vault.authorizeNetworkAction(plan,undefined,save),/HANDOVER_RETIRED/);
-  assert.equal(vault.details.reservations,1);
+  vault.lock();await assert.rejects(vault.repairHandoverPayment(plan),/LOCKED/);await vault.unlock(password);
+  for(const changes of [{gasPrice:'0x3'},{nonce:'0x4'},{id:crypto.randomUUID()},{payer:account,recipient:account},
+    {offer:{...target,newRoot:part('9')}},{fingerprint:'00'.repeat(16)}]){
+    await assert.rejects(vault.repairHandoverPayment({...plan,...changes}),/REPAIR_MISSING|HANDOVER_OFFER/);
+  }
+  const copy=fixture({}).vault;t.after(()=>copy.lock());
+  await copy.restoreBackup(await vault.exportBackup(),password);
+  await assert.rejects(copy.repairHandoverPayment(plan),/RECOVERY/);assert.equal(repairs,0);
+  const encrypted=await store.read(),history=historyFor(plan);
+  const options={id:plan.id,store:history,walletId:()=>walletId,locks,repairPayment:row=>vault.repairHandoverPayment(row)};
+  const repaired=await repairInterruptedHandover(options);
+  assert.equal(repaired.dataHash,firstHash);assert.ok((await vault.readHandoverPayment(repaired)).endsWith(hex(proof)));
+  assert.equal(await store.read(),encrypted);assert.equal(vault.details.reservations,1);assert.equal(repairs,1);
+  await assert.rejects(repairInterruptedHandover(options),/RETRY_CHECK/);
+  const recovering={...plan,status:'stopped'};
+  const ordinary=Array.from({length:31},()=>({kind:'send',status:'included'}));
+  assert.equal(retainNetworkHistory([recovering,...ordinary],{kind:'send',payer,nonce:'0x4',account})[0],recovering);
+  assert.throws(()=>retainNetworkHistory([recovering],plan),/TRIAL_IN_USE/);
+  assert.equal(canRepairHandover({...plan,status:'stopped',repairVersion:undefined}),false);
+  assert.throws(()=>reservedHandoverIntent(plan,[{handoverOut:true}]),/REPAIR_MISSING/);
+});
+
+test('an interrupted plan with no reservation releases its preparing state',async t=>{
+  const {vault}=fixture({});t.after(()=>vault.lock());
+  const {walletId}=await vault.create(crypto.randomUUID(),97);
+  const plan={...rotation,id:crypto.randomUUID(),walletId,nonce:'0x1',repairVersion:1};
+  const history=historyFor(plan);
+  (await history.read()).rows[0].status='preparing';
+  await assert.rejects(repairInterruptedHandover({store:history,id:plan.id,walletId:()=>walletId,locks,
+    repairPayment:row=>vault.repairHandoverPayment(row)}),/REPAIR_MISSING/);
+  const [row]=(await history.read()).rows;
+  assert.equal(row.status,'stopped');assert.equal(row.repairAbsent,true);assert.equal(canRepairHandover(row),false);
+  assert.equal(vault.details.reservations,0);
 });

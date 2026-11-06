@@ -11,6 +11,7 @@ export function compareBackupJournal(saved, current) {
   for (const [index, row] of saved.entries()) {
     const local = current[index];
     if (fields.some(field => row[field] !== local[field]) ||
+        ['binding','salt','rnd'].some(field=>row.commitment?.[field]!==local.commitment?.[field]) ||
         (row.simulationAttempt && !local.simulationAttempt)) return 'different';
     if (row.simulationAttempt !== local.simulationAttempt) older = true;
   }

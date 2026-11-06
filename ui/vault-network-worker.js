@@ -2,6 +2,7 @@ import {decryptPayload,fail,hex} from './vault-crypto.js';
 import {testActiveSeeds,testIdentitySeeds} from './test-wallet-core.js';
 import {EvmTreeKey,grind} from './lib/evmwots.js';
 import {fromHex} from './local-proof.js';
+import {reservedHandoverIntent} from './handover-payment.js';
 import {networkHasher,setup,validateNetworkPlan} from './vault-network-proof.js';
 
 const random=n=>crypto.getRandomValues(new Uint8Array(n));
@@ -13,11 +14,13 @@ self.onmessage=async({data:{id,type,payload}})=>{
       const result=tree.sign(intent.leaf,fromHex(intent.digest));
       tree.skSeed.fill(0);self.postMessage({id,result},[result.buffer]);self.close();return;
     }
-    if (type!=='prepare' || prepared) fail('NET_PROOF');
+    if (!['prepare','repair'].includes(type) || prepared) fail('NET_PROOF');
     const {record,key,plan,leaf}=payload;
     validateNetworkPlan(plan);
     if (record.mode!=='active' || record.chainId!==97 || record.walletId!==plan.walletId) fail('RECOVERY');
-    const master=fromHex((await decryptPayload(record,key)).seed);
+    const payloadData=await decryptPayload(record,key);
+    const committed=type==='repair'?reservedHandoverIntent(plan,payloadData.journal):null;
+    const master=fromHex(payloadData.seed);
     let source,successor;
     try {
       const buildingTwo=plan.kind!=='send' && !plan.offer, startup=setup(plan.kind);
@@ -30,6 +33,10 @@ self.onmessage=async({data:{id,type,payload}})=>{
       } else source=testActiveSeeds(master,97,plan.account,plan.snapshot.epoch,fromHex(plan.snapshot.pubSeed.slice(2)));
       const tree=build(source,false);
       if (!startup && '0x'+hex(tree.root)!==plan.snapshot.root) fail('NET_KEYS');
+      if(committed){
+        const proof=tree.sign(committed.leaf,fromHex(committed.digest));
+        self.postMessage({id,result:proof},[proof.buffer]);self.close();return;
+      }
       const intent={leaf,seed:hex(tree.pubSeed),root:hex(tree.root),rnd:hex(random(16))};
       if(plan.offer){intent.newSeed=plan.offer.newSeed.slice(2);intent.newRoot=plan.offer.newRoot.slice(2);}
       if (buildingTwo) {

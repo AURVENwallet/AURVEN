@@ -30,7 +30,7 @@ export async function previewNetwork(endpoint,{walletId,payer,account,kind,recip
   }
   if(offer!==undefined){
     requireTrial(kind==='rotate' && fingerprint===handoverFingerprint(offer),'HANDOVER_FINGERPRINT');
-    Object.assign(plan,{offer:structuredClone(offer),fingerprint,deadline:offer.deadline});
+    Object.assign(plan,{offer:structuredClone(offer),fingerprint,deadline:offer.deadline,repairVersion:1});
   }
   const checked=await verifyNetworkPlanState(plan,endpoint,secondary);
   if (checked.snapshot) plan.snapshot=checked.snapshot;
@@ -51,13 +51,13 @@ export function retainNetworkHistory(rows,plan) {
   const now=Date.now()/1000;
   function removable(row) {
     // The other device may still need to export this exact handover record.
-    if ((row.offer && row.dataHash) || needsReceiptCheck(row)) return false;
+    if ((row.offer && row.dataHash) || (canRepairHandover(row) && row.deadline>now) || needsReceiptCheck(row)) return false;
     if (['declined','stopped','reverted','replaced','expired'].includes(row.status)) return true;
     if (row.status==='preparing' && row.deadline<=now) return true;
     return row.status==='included' && row.kind!=='create';
   }
   const unresolved=['requested','waiting','pending','unseen','reorg'];
-  const conflict=rows.some(row=>row.payer===plan.payer && row.nonce===plan.nonce && (unresolved.includes(row.status) || needsReceiptCheck(row)) &&
+  const conflict=rows.some(row=>row.payer===plan.payer && row.nonce===plan.nonce && (unresolved.includes(row.status) || canRepairHandover(row) || needsReceiptCheck(row)) &&
     (row.kind==='fund' || row.deadline>=now));
   requireTrial(!conflict,'TRIAL_IN_USE');
   if (plan.kind==='create') {
@@ -127,6 +127,33 @@ async function submitPlan({endpoint,secondary,store,provider,plan,authorize,wall
     });
     throw e;
   }
+}
+export function canRepairHandover(row){
+  return row?.repairVersion===1 && !row.repairAbsent && row.kind==='rotate' && !!row.offer && !row.escrow &&
+    !row.dataHash && !row.hash && !row.submittedHash && ['preparing','stopped'].includes(row.status);
+}
+export async function repairInterruptedHandover({store,id,repairPayment,walletId,locks=globalThis.navigator?.locks}){
+  const read=async()=>(await store.read())?.rows.find(r=>r.id===id);
+  const initial=await read();
+  requireTrial(canRepairHandover(initial),'RETRY_CHECK');
+  return withPaymentLock(initial,true,locks,async()=>{
+    const row=await read();
+    requireTrial(canRepairHandover(row) && row.payer===initial.payer && row.nonce===initial.nonce,'RETRY_CHECK');
+    requireTrial(walletId()===row.walletId,'NET_VAULT');
+    let saved;
+    try{saved=await repairPayment(row);}
+    catch(error){
+      if(error.code==='REPAIR_MISSING'){
+        await updateTrial(store,id,current=>canRepairHandover(current)?{...current,status:'stopped',repairAbsent:true}:current);
+      }
+      throw error;
+    }
+    requireTrial(walletId()===row.walletId,'NET_VAULT');
+    return updateTrial(store,id,current=>{
+      requireTrial(JSON.stringify(current)===JSON.stringify(row),'RETRY_CHECK');
+      return {...current,...saved,status:'stopped',leafReserved:true};
+    });
+  });
 }
 export function canResumeHandover(row){
   return !!(row?.kind==='rotate' && row.offer && row.escrow && row.dataHash &&

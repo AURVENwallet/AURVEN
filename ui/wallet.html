@@ -71,6 +71,7 @@ node scripts/local-wallet.mjs</code></pre>
 <div id="netHistory" hidden><div class="trial-form"><label>操作记录<select id="netRecords"></select></label><button id="netCheck" type="button">双节点核对回执</button><button id="netOld" type="button" hidden>只读验证旧授权</button></div>
 <label id="netManual" hidden>付款钱包里的交易哈希（可选）<input id="netHash" placeholder="0x…" maxlength="66"></label>
 <button id="netRotationExport" type="button" hidden>导出公开换根记录</button>
+<button id="netRepair" type="button" hidden>从已预留的签名叶恢复原授权</button>
 <div id="netRetry" hidden><p>付款中断时，解锁原密钥库并连接原付款钱包，可核对已保存的交接授权。</p>
 <button id="netRetryPreview" type="button">检查原付款能否继续</button>
 <div id="netRetryReview" hidden><dl class="trial-values"><dt>智能账户</dt><dd id="retryAccount"></dd><dt>付款钱包与序号</dt><dd id="retryPayer"></dd>

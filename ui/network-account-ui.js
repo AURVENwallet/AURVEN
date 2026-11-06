@@ -1,9 +1,9 @@
 import {secondaryTestnet as secondary} from './testnet-heads.js';
 import {handoverFingerprint} from './vault-network-proof.js';
-import {networkWalletId,authorizeNetwork,readHandoverPayment,receivedTestnetAccount,receiveTestnetHandover} from './vault-ui.js';
+import {networkWalletId,authorizeNetwork,repairHandoverPayment,readHandoverPayment,receivedTestnetAccount,receiveTestnetHandover} from './vault-ui.js';
 import {openVaultStore} from './vault-store.js';
 import {trialEndpoint,payerAccount,inTbnb} from './browser-trial.js';
-import {canResumeHandover,reviewHandoverPayment,resumeHandoverPayment,previewNetwork,submitNetwork,reconcileNetwork,needsReceiptCheck,checkOldApproval} from './network-account.js';
+import {canRepairHandover,repairInterruptedHandover,canResumeHandover,reviewHandoverPayment,resumeHandoverPayment,previewNetwork,submitNetwork,reconcileNetwork,needsReceiptCheck,checkOldApproval} from './network-account.js';
 import {compareNetworkReceipts} from './network-receipt.js';
 import {readAccount} from './account-state.js';
 import {exportRotationRecord} from './testnet-rotation.js';
@@ -23,7 +23,7 @@ const kinds={create:'建户并存入 3 wei',send:'转出 1 wei',rotate:'轮换�
 const states={pending:'付款钱包已提交，当前节点仍在等待打包。',unseen:'当前节点未找到这笔交易。请稍后再核对，或从付款钱包复制交易哈希。',
   replaced:'相同付款序号已被另一笔不同内容的交易使用。',reorg:'原回执所在区块已被替换，当前链上尚未核实这笔操作。',
   expired:'截至核对区块未发现已打包的付款，签名授权已过期。',preparing:'准备中',requested:'等待核对付款结果',waiting:'等待链上回执。',included:'交易回执已核对',declined:'付款请求已取消。',stopped:'准备已停止，尚未请求付款。',reverted:'交易已打包，但执行失败。'};
-const errors={RETRY_LOCK:'此浏览器无法锁定付款请求，请使用支持 Web Locks 的浏览器。',RETRY_CHECK:'未能确认原付款可继续，请先核对回执和付款序号。',
+const errors={REPAIR_MISSING:'原密钥库中没有此操作的匹配预留，请重新预览或核对历史记录。',RETRY_LOCK:'此浏览器无法锁定付款请求，请使用支持 Web Locks 的浏览器。',RETRY_CHECK:'未能确认原付款可继续，请先核对回执和付款序号。',
   RETRY_INVALID:'保存的授权与原付款记录不符，已停止。',RETRY_MISSING:'本机没有这笔交接的已保存授权。',
   HANDOVER_OFFER:'交接请求与账户、密钥或授权有效期不符。',HANDOVER_FINGERPRINT:'指纹不一致，请通过另一渠道向新设备核对。',
   HANDOVER_FRESH:'请使用全新、独立的链 97 密钥库接收该账户。',HANDOVER_RETIRED:'旧密钥已预留换根授权，请核对原回执。',
@@ -70,13 +70,14 @@ function render(){
   el('netHistory').hidden=!row;if (!row) return;
   el('netRotationExport').hidden=row.kind!=='rotate'||!row.intent||!row.dataHash;
   el('netRotationExport').disabled=busy;
+  el('netRepair').hidden=!canRepairHandover(row)||row.deadline<=Date.now()/1000;el('netRepair').disabled=busy;
   el('netRetry').hidden=!canResumeHandover(row);
   el('netRetryPreview').disabled=busy||!payer;
   el('netRetryConfirm').disabled=busy||!retryReview||retryReview.id!==row.id;
   el('netCheck').disabled=busy||!row.dataHash;el('netManual').hidden=!row.dataHash||(!needsReceiptCheck(row)&&['included','reverted','replaced'].includes(row.status));
   el('netOld').hidden=row.kind!=='send'||row.status!=='included'||needsReceiptCheck(row);el('netOld').disabled=busy;
   const details=[states[row.status]??''];
-  if(row.offer && !row.escrow && (row.dataHash||row.leafReserved) && !['included','reverted','replaced'].includes(row.status)){
+  if(row.offer && !canRepairHandover(row) && !row.escrow && (row.dataHash||row.leafReserved) && !['included','reverted','replaced'].includes(row.status)){
     details.push('此记录没有可恢复的签名副本，请核对原回执。');
   }
   if(row.escrow && row.deadline<=Date.now()/1000 && el('netRetry').hidden===false){
@@ -191,6 +192,13 @@ el('netRecords').onchange=()=>{reset();el('netHash').value='';render();};
 async function retryOptions(id){
   return {id,store:await storage(),provider:window.ethereum,walletId:networkWalletId,readPayment:readHandoverPayment,endpoint,secondary};
 }
+el('netRepair').onclick=()=>action(async()=>{
+  reset();const id=selected().id;
+  try{
+    await repairInterruptedHandover({id,store:await storage(),walletId:networkWalletId,repairPayment:repairHandoverPayment});
+    status('原授权已在本机恢复。请检查原付款能否继续。');
+  }finally{await refresh(id);}
+});
 el('netRetryPreview').onclick=()=>action(async()=>{
   reset();
   const r=await reviewHandoverPayment(await retryOptions(selected().id));

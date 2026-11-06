@@ -11,7 +11,7 @@ import {verifyNetworkPlanState} from './signing-preflight.js';
 import {compareBackupJournal, readRecoveryAccount, recoveryJournalReview} from './backup-recovery.js';
 import {checkSource,confirmLocalHandover,offerFingerprint,readHandoverState,rotationMessage,sendLocalRotation} from './local-handover.js';
 import {recoverTestnetRotation,validateRotationRecord} from './testnet-rotation.js';
-import {openHandoverPayment,sealHandoverPayment} from './handover-payment.js';
+import {handoverBinding,reservedHandoverIntent,openHandoverPayment,sealHandoverPayment} from './handover-payment.js';
 import {EXEC_LIMIT} from './lib/evmwots.js';
 
 export class TestVault {
@@ -358,6 +358,35 @@ export class TestVault {
       return data;
     });
   }
+  async #checkReceivedKey(context,payload,plan){
+    const inbound=payload.inboundOffer;
+    if(!inbound || inbound.account!==plan.account)return;
+    if(!payload.inboundHash || !plan.snapshot || plan.snapshot.epoch<=inbound.epoch)fail('HANDOVER_PENDING');
+    const state=await this.recoveryReader({account:plan.account,tag:'finalized'});this.#check(context);
+    if(!keyStateEqual(state,plan.snapshot) || (state.epoch===inbound.epoch+1 &&
+      (state.root!==inbound.newRoot || state.pubSeed!==inbound.newSeed)))fail('HANDOVER_PENDING');
+  }
+  async repairHandoverPayment(input){
+    const context=this.#capture(),plan=structuredClone(input);
+    return this.#exclusive(async()=>{
+      const {record,payload}=await this.#load(context);
+      if(record.mode!=='active' || record.chainId!==97 || record.walletId!==plan.walletId)fail('RECOVERY');
+      const intent=reservedHandoverIntent(plan,payload.journal);
+      await this.networkPreflight(plan);await this.#checkReceivedKey(context,payload,plan);this.#check(context);
+      const worker=this.networkWorkerFactory();
+      this.#networkWorker=worker;
+      try{
+        const proof=await worker.request('repair',{record,key:context.key,plan});
+        try{
+          this.#check(context);
+          const data=encodeNetworkAction(plan,intent,proof);
+          const sealed=await sealHandoverPayment(context.key,plan,data);
+          this.#check(context);
+          return {...sealed,intent};
+        }finally{proof.fill(0);}
+      }finally{worker.dispose();if(this.#networkWorker===worker)this.#networkWorker=undefined;}
+    });
+  }
   async authorizeNetworkAction(input,progress,savePayment) {
     const context=this.#capture(),plan=structuredClone(input);
     validateNetworkPlan(plan);
@@ -374,15 +403,7 @@ export class TestVault {
       if (payload.journal.length>=MAX_RESERVATIONS) fail('FULL');
       await fresh();
       if(plan.offer && payload.journal.some(row=>row.root===plan.offer.oldRoot.slice(2) && row.leaf>=EXEC_LIMIT))fail('HANDOVER_RETIRED');
-      const inbound=payload.inboundOffer;
-      const checkInbound=async()=>{
-        if(!inbound || inbound.account!==plan.account)return;
-        if(!payload.inboundHash || !plan.snapshot || plan.snapshot.epoch<=inbound.epoch)fail('HANDOVER_PENDING');
-        const state=await this.recoveryReader({account:plan.account,tag:'finalized'});this.#check(context);
-        if(!keyStateEqual(state,plan.snapshot) || (state.epoch===inbound.epoch+1 &&
-          (state.root!==inbound.newRoot || state.pubSeed!==inbound.newSeed)))fail('HANDOVER_PENDING');
-      };
-      await checkInbound();
+      await this.#checkReceivedKey(context,payload,plan);
       const leaf=spendingLeaf(plan,payload.journal),worker=this.networkWorkerFactory();
       this.#networkWorker=worker;
       let reserved=false;
@@ -390,10 +411,10 @@ export class TestVault {
         const intent=await worker.request('prepare',{record,key:context.key,plan,leaf},progress);
         this.#check(context);validateIntent(plan,intent,leaf);
         const row=validateReservation({chainId:97,account:plan.account,epoch:plan.snapshot?.epoch??0,
-          pubSeed:intent.seed,root:intent.root,leaf,digest:intent.digest,...(plan.offer?{handoverOut:true}:{})});
+          pubSeed:intent.seed,root:intent.root,leaf,digest:intent.digest,...(plan.offer?{handoverOut:true,commitment:{binding:handoverBinding(plan),salt:intent.salt,rnd:intent.rnd}}:{})});
         if (payload.journal.some(entry=>reservationId(entry)===reservationId(row))) fail('USED');
         if (intent.newRoot && payload.journal.some(entry=>entry.root===intent.newRoot)) fail('NET_KEYS');
-        await fresh();await checkInbound();
+        await fresh();await this.#checkReceivedKey(context,payload,plan);
         payload.journal.push(row);
         const updated=await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
         this.#check(context);await this.store.compareAndSwap(record,updated);reserved=true;this.#check(context);
@@ -412,7 +433,7 @@ export class TestVault {
             this.#check(context);
             await savePayment({...saved,intent});
           }
-          await fresh();await checkInbound();
+          await fresh();await this.#checkReceivedKey(context,payload,plan);
           return {data,intent};
         } finally {proof.fill(0);}
       } catch (error) {

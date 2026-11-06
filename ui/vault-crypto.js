@@ -41,6 +41,13 @@ export function validateReservation(row){
     fields.push('handoverOut');
     if(row.handoverOut!==true || row.chainId!==97 || row.epoch<1 || row.leaf<960)fail('RESERVATION');
   }
+  if(row && Object.hasOwn(row,'commitment')){
+    fields.push('commitment');
+    const c=row.commitment;
+    if(!row.handoverOut || !keys(c,['binding','salt','rnd']) || typeof c.binding!=='string' ||
+      !/^0x[0-9a-f]{64}$/.test(c.binding) || !isHex(c.rnd,32) ||
+      !Number.isInteger(c.salt) || c.salt<0 || c.salt>0xffffffff)fail('RESERVATION');
+  }
   if(row && Object.hasOwn(row,'simulationAttempt')){
     fields.push('simulationAttempt');
     if(row.simulationAttempt!==true || row.chainId!==31337 || row.epoch<1 || row.leaf>=960)fail('RESERVATION');

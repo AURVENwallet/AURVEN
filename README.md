@@ -18,6 +18,8 @@ For a disposable trial, try a [one-wei transfer in your browser](https://aurven.
 
 The [browser receipt](https://testnet.bscscan.com/tx/0x96b45367b4f3f5761610e6ee22bd168c26474e1244df998ee98155c972176a26) covers account creation, activation, funding and transfer in one transaction. The [engineering record](docs/MAINNET_READINESS.md) also includes the four individual CLI receipts and remaining release gates.
 
+The [zero-cost BSC mainnet rehearsal](docs/MAINNET_READINESS.md#bsc-mainnet-deployment-rehearsal) runs the generic factory and account against a shared finalized block using read-only RPC calls. The public wallet interface remains on testnet.
+
 ## Quick start
 
 ### Start a disposable wallet
@@ -58,7 +60,7 @@ The receiver stores the request inside its encrypted vault and can unlock it aga
 3. Export the public rotation record from the source's history. On the receiver choose **Verify and accept account** with that record. If discovery needs more block ranges, use the receipt checker and paste the verified transaction hash. Both nodes must confirm the rotation and the currently active receiving root.
 4. Connect a testnet payer on the receiving device. Preview a one-wei transfer, verify the recipient and confirm. The account address stays the same. The gas payer can be shared between devices independently of their vaults.
 
-Each receiving vault holds one request for one account. Its authorization window is 30 minutes. An expired, unsigned request can be replaced using a fresh receiving vault. If payment was declined or dropped, unlock the original vault, reconnect the original payer and select the handover in **Action history**. Choose **Review interrupted payment** and check the account, receiving root, fingerprint, payer nonce, fee limit and UTC deadline. **Open payer with saved authorization** asks the connected payer to approve those original terms again. The vault signs the handover only once. A transaction already pending or included should be followed through **Check receipt**, and both endpoints must agree before a retry. Imported backups remain read-only. [Open the testnet device handover](https://aurven.site/wallet.html#testnetHandover).
+Each receiving vault holds one request for one account. Its authorization window is 30 minutes. An expired, unsigned request can be replaced using a fresh receiving vault. If payment was declined or dropped, unlock the original vault, reconnect the original payer and select the handover in **Action history**. Choose **Review interrupted payment** and check the account, receiving root, fingerprint, payer nonce, fee limit and UTC deadline. **Open payer with saved authorization** asks the connected payer to approve those original terms again. A normal retry reuses the saved signature. If the browser closed after reserving a leaf but before storing the signature, select **Recover authorization from reserved leaf** first. The original vault can recreate only the authorization already bound to that leaf. Recovery by itself never opens the payer. A transaction already pending or included should be followed through **Check receipt**, and both endpoints must agree before a retry. Imported backups remain read-only. [Open the testnet device handover](https://aurven.site/wallet.html#testnetHandover).
 
 ### Recover a BSC testnet rotation receipt
 

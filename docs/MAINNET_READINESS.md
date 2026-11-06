@@ -2,6 +2,29 @@
 
 Updated 2026-11-06. An encrypted browser vault created a reusable smart account on BSC testnet (chain 97), signed two transfers, rotated to a fresh active tree, and signed a third transfer from the same address. Two separate browser profiles also completed a public testnet handover and the receiver signed a one-wei transfer. Lost-device recovery, deep reorganization drills and independent security review remain open.
 
+## BSC mainnet deployment rehearsal
+
+On 2026-11-06 at 08:20:16 UTC the two BNB Chain endpoints listed below agreed on finalized block [131975685](https://bscscan.com/block/131975685), hash `0x65799fa2ef0d0e34055b6d03ac6aabd58d5c05952fcbbf7b2a6fbee2d6711b9e`. Both executed the compiled generic factory and account against that block using read-only RPC calls. The rehearsal requires no payer, wallet connection or private credentials. Real fees paid were **0 BNB**.
+
+| Observation | Result at both endpoints |
+| --- | --- |
+| Factory creation | 1,593,325 gas estimated. Both nodes quoted 0.05 gwei, equivalent to 0.00007966625 BNB for the factory alone at that price. |
+| Factory runtime hash | `0xf8ab4f37676498d1425e17f218b6096cbc23ece3fbd3ad0480039a044a28ec1a` |
+| Account runtime hash | `0xfde1d7b52ce9867d45e45472c64e146e5dd3faa19aa05ed7339659b600f18144` |
+| Successful calls | Factory creation, predicted-address account creation, activation, a one-wei transfer, rotation and a one-wei transfer using the new root. Final epoch 2, next leaf 1. |
+| Rejected calls | Transfer before activation, replay of a consumed leaf, an authorization for chain 97 and a still-unexpired transfer signed by the retired root. |
+
+Run from a clean checkout with the pinned Foundry and Node.js versions:
+
+```sh
+forge build
+node scripts/mainnet-rehearsal.mjs
+```
+
+The script queries `bsc-dataseed.bnbchain.org` and `bsc-dataseed-public.bnbchain.org`. Each run selects a recent common finalized block and checks its hash before and after simulation. It compares the compiled creation code with the client pins, estimates standalone factory creation, then executes the account lifecycle inside a single temporary EVM call per node. The executor, three fixture wei and disposable test keys exist only for this simulation. The script accepts only read RPC methods and checks the fixture addresses for existing code, funds and nonces. A run creates no on-chain contract, transaction hash or fee obligation. Both endpoints may share infrastructure. [Official endpoint list](https://docs.bnbchain.org/bnb-smart-chain/developers/json_rpc/json-rpc-endpoint/).
+
+The public wallet still uses the chain-97 setup contract and testnet derivation policy. A dedicated chain-56 signing and setup design, independent review and the release gates below remain prerequisites for a real-asset wallet.
+
 ## Reusable browser account
 
 Open the [reusable account panel](https://aurven.site/wallet.html#managedAccount) and unlock an original chain-97 test vault in the same browser profile. Connect a separate test wallet with faucet tBNB to pay gas. Account creation deposits three wei. Each transfer of one wei, key rotation or top-up of three wei has its own fee preview and payer confirmation.
@@ -97,7 +120,9 @@ A local two-profile drill rejected the first payer prompt, submitted the second 
 
 On 2026-11-06 a second drill on BSC testnet used two separate Edge profiles and a constrained faucet payer. It [created a fresh account](https://testnet.bscscan.com/tx/0x4a3c43beb71654c10b2d02df2511b15dfbff3dd0fd5a1087c75f4f23a20778a8), deliberately declined the first request before broadcast, then reloaded and unlocked the source. The saved authorization produced [one mined rotation at block 141111637](https://testnet.bscscan.com/tx/0x83a2bae8cf548b264a7cf215685dc58b1b0961a3a563f403c87bc8b9d3c0388c). After receipt verification and reload the receiver [sent one wei from epoch 2, leaf 0](https://testnet.bscscan.com/tx/0x8ec08be3fa2d5d016cb65b61d6ab1ed2b6be7c2159e0ff208348084b9d19fb34). Both endpoints agreed at finalized block 141111925 on all three receipts, epoch 2, next leaf 1 and a two-wei balance. Total fees were 0.0001925587 tBNB. The mempool eviction was exercised locally.
 
-The encrypted payment and the original vault are both required. The manual retry stops on an expired authorization, changed signing state, fee mismatch, occupied nonce, a pending or included transaction, or incomplete evidence. A crash between leaf reservation and saving the encrypted payment still leaves the leaf spent. Public receipt exports and previously created handover records contain no executable retry material. The two RPC endpoints may share infrastructure, and an external payer controls the outer transaction it submits.
+Once the encrypted payment exists, the original active vault can reopen it. The manual retry stops on an expired authorization, changed signing state, fee mismatch, occupied nonce, a pending or included transaction, or incomplete evidence. For new handovers, the encrypted reservation also commits the exact message digest, randomizer, salt and a hash of the original fee request. If the browser closes before the signed payment is saved, unlock the original vault and select **Recover authorization from reserved leaf**. The worker reconstructs only that same proof and seals the payment locally. The review and payer confirmation are separate steps. Imported backups, public receipt exports and legacy reservations without this commitment cannot reconstruct the proof.
+
+Two isolated Edge profiles on a disposable chain-97 node rehearsed two interruptions: closing after reservation but before signing, and aborting the payment storage write after signing. Each source reloaded, reconstructed its reserved authorization and kept a single reservation. In the second drill the reconstructed calldata hash matched the original. Recovery did not open the payer. After explicit approval each receiver verified the rotation, reopened its vault and sent one fixture wei. Losing the original vault or the action history still prevents this recovery. The two RPC endpoints may share infrastructure, and an external payer controls the outer transaction it submits.
 
 ## Disposable browser transfer
 
@@ -162,7 +187,7 @@ These estimates assume continuous development of the single-signer native-coin w
 | Milestone | Planning range from this baseline | Evidence required to pass |
 | --- | --- | --- |
 | Single-device public testnet pilot | Basic path completed on 2026-11-06 | Five mined actions and recovery after a lost payer reply are recorded above. Local drills now cover dropped, replaced, reverted and reorganized payments. Remaining pilot work includes retail wallet compatibility, testing against restricted RPC history and observing a wider range of public network conditions. |
-| Recovery and pilot | Allow a further 4–8 weeks for engineering and drills | Extend the handover payment recovery coverage to other signed operations and exercise the crash window before signed bytes are durably stored. Reproduce receipt recovery across independent RPC outages, deep reorganizations and device loss while preserving every previously used leaf. Repeat the two-profile handover on physical devices and test lost-device recovery, historical-root rejection and fail-closed behavior after restoring an old profile. Run a public testnet pilot through those scenarios. |
+| Recovery and pilot | Allow a further 4–8 weeks for engineering and drills | Extend crash recovery to other signed operations and repeat interrupted handovers on physical devices. Reproduce receipt recovery across independent RPC outages, deep reorganizations and device loss while preserving every previously used leaf. Test lost-device recovery, historical-root rejection and fail-closed behavior after restoring an old profile. Run a public testnet pilot through those scenarios. |
 | Public real-asset wallet | Conditional planning range of 3–6 months total | Obtain independent cryptographic parameter and contract/client reviews, fix and retest findings, and publish results. Resolve custody and key-reuse findings before launch. Verify network-specific builds, deployment reproducibility, live monitoring, incident response and a funded mainnet gas payer. Obtain explicit mainnet deployment approval. |
 
 With the existing server, local tools and faucet tBNB, early testing can proceed on the current budget. The independent review needs a confirmed volunteer, sponsor or funding. Mainnet deployment needs real BNB for gas. Until those resources and the technical gates are satisfied, a public launch date is open. [BNB Smart Chain testing and gas](https://docs.bnbchain.org/bnb-smart-chain/developers/quick-guide/) · [Key management and recovery](KEY_STATE.md) · [Current security status](../SECURITY.md).

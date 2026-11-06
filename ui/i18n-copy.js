@@ -1,5 +1,8 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '从已预留的签名叶恢复原授权':'Recover authorization from reserved leaf',
+  '原授权已在本机恢复。请检查原付款能否继续。':'Original authorization recovered on this device. Review the interrupted payment.',
+  '原密钥库中没有此操作的匹配预留，请重新预览或核对历史记录。':'No matching reservation in the original vault. Review the history or start a new preview.',
   '此记录没有可恢复的签名副本，请核对原回执。':'This record has no recoverable signed copy. Check the original receipt.',
   '此交接授权已到期，只能核对原付款结果。':'This handover authorization has expired. Check the outcome of the original payment.',
   '此浏览器无法锁定付款请求，请使用支持 Web Locks 的浏览器。':'Use a browser with Web Locks to coordinate this payment.',

@@ -173,6 +173,10 @@ export async function receiveTestnetHandover(account,record,hash){
   try{return record?await vault.acceptTestnetHandover(record,hash):await vault.prepareTestnetHandover(account);}
   finally{details=await vault.inspect();render();}
 }
+export async function repairHandoverPayment(row){
+  networkWalletId();
+  return vault.repairHandoverPayment(row);
+}
 export async function readHandoverPayment(row){
   networkWalletId();
   return vault.readHandoverPayment(row);
