@@ -23,7 +23,20 @@ node scripts/mainnet-rehearsal.mjs
 
 The script queries `bsc-dataseed.bnbchain.org` and `bsc-dataseed-public.bnbchain.org`. Each run selects a recent common finalized block and checks its hash before and after simulation. It compares the compiled creation code with the client pins, estimates standalone factory creation, then executes the account lifecycle inside a single temporary EVM call per node. The executor, three fixture wei and disposable test keys exist only for this simulation. The script accepts only read RPC methods and checks the fixture addresses for existing code, funds and nonces. A run creates no on-chain contract, transaction hash or fee obligation. Both endpoints may share infrastructure. [Official endpoint list](https://docs.bnbchain.org/bnb-smart-chain/developers/json_rpc/json-rpc-endpoint/).
 
-The public wallet still uses the chain-97 setup contract and testnet derivation policy. A dedicated chain-56 signing and setup design, independent review and the release gates below remain prerequisites for a real-asset wallet.
+### Atomic mainnet account setup
+
+The rehearsal also runs the chain-56-only `BscMainnetFactory`. It predicts the CREATE2 address using the identity seed, identity root, factory address and pinned account creation code. A single nonpayable call creates the account and installs its first active root. Before creation the factory checks the expected address and a deadline at most one hour ahead. It exposes no separate creation entry. If proof verification fails, the EVM rolls back account creation. Any caller can relay an already valid authorization to install the exact root the owner signed. A later attempt at the same address reverts. Observing the intended active root is necessary before treating a lost submission reply as a failure.
+
+Both official endpoints estimated and executed the compiled factory at the same finalized block. Each run built two complete 1,024-leaf trees from fresh disposable inputs before sampling the final block. The nodes first rejected a corrupted proof and checked that the account address still had no code. They then created and activated the predicted account, rejected duplicate creation, and executed a one-wei transfer authorized by active leaf 0. The funded fixture and its state disappeared at the end of the call. The script compared the created factory and account runtime hashes to the build and verified the factory's pinned creation and runtime hashes.
+
+| Finalized block (UTC) | Deploy chain-56 factory | Create and activate one account | Real fee |
+| --- | ---: | ---: | ---: |
+| [131979141](https://bscscan.com/block/131979141), 2026-11-06 08:46:11 | 1,752,963 gas | 1,460,078 gas | 0 BNB |
+| [131979509](https://bscscan.com/block/131979509), 2026-11-06 08:48:57 | 1,752,963 gas | 1,522,741 gas | 0 BNB |
+
+At block 131979509 (`0x74d7299e67b0d0c8db372b2f8911b5fe9079311cbf0fd398057c5a8351f91373`) both endpoints quoted 0.05 gwei. The estimates cover two separate operations. A factory can serve multiple accounts and the verification cost varies with the proof. The factory runtime hash was `0x5c6acbf647dd904587d5d3511a42aea596a4ef23e9ae85b83e236b62ec356101`. One earlier attempt stopped when a node did not return an activation estimate. Missing evidence from either endpoint fails the run. Rerun the command above for fresh keys and a new block. The report's `atomicSetup` object describes this factory; top-level factory and rotation results refer to the original generic scenario.
+
+The public wallet still uses chain 97. Production seed custody, persistent reservations on chain 56, independent recovery after device loss, and an independent review of the cryptography and contracts are open. [Key derivation and recovery limits](KEY_STATE.md#bsc-mainnet-rehearsal-keys).
 
 ## Reusable browser account
 

@@ -1,5 +1,6 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '查看主网建户只读演练 ↗':'View read-only mainnet setup rehearsal ↗',
   '从已预留的签名叶恢复原授权':'Recover authorization from reserved leaf',
   '原授权已在本机恢复。请检查原付款能否继续。':'Original authorization recovered on this device. Review the interrupted payment.',
   '原密钥库中没有此操作的匹配预留，请重新预览或核对历史记录。':'No matching reservation in the original vault. Review the history or start a new preview.',

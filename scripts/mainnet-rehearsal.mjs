@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
+import {prepareSetupFixture,bootstrapLeaf,factoryPins} from './mainnet-setup.mjs';
 import {accountRpc} from '../ui/account-state.js';
 import {createdAddress,hashBytes} from '../ui/browser-trial.js';
 import {keccak256} from '../ui/lib/keccak.js';
@@ -53,21 +54,28 @@ async function empty(rpc,addresses,at){
   }));
 }
 
+async function commonFinalizedBlock(clients){
+  const heads=await Promise.all(clients.map(rpc=>rpc('eth_getBlockByNumber',['finalized',false])));
+  for(const h of heads)assert.ok(h && /^0x[0-9a-f]+$/.test(h.number) && /^0x[0-9a-f]{64}$/.test(h.hash),'Missing finalized head');
+  const block=BigInt(heads[0].number)<=BigInt(heads[1].number)?heads[0]:heads[1];
+  assert.ok(heads.every(h=>/^0x[0-9a-f]+$/.test(h.timestamp) && Math.abs(Date.now()/1000-Number(BigInt(h.timestamp)))<=120),
+    'Expected recent finalized heads');
+  assert.ok(heads.every(h=>h.number!==block.number || h.hash===block.hash),'Finalized heads disagree');
+  return block;
+}
+
 export async function rehearseMainnet(nodes=endpoints.map(url=>accountRpc(url))){
   assert.equal(nodes.length,2,'Two RPC observations required');
   const clients=nodes.map(rpc=>(name,params=[])=>{assert.ok(allowed.has(name),'Read-only rehearsal');return rpc(name,params);});
-  const [[factory,account,driver],heads]=await Promise.all([
-    Promise.all(['KeyLabFactory','KeyLabAccount','MainnetScenario'].map(artifact)),
-    Promise.all(clients.map(async rpc=>{
-      assert.equal(await rpc('eth_chainId'),'0x38','BSC mainnet chain 56 required');
-      return rpc('eth_getBlockByNumber',['finalized',false]);
-    }))
+  const [[factory,account,driver,setupFactory]]=await Promise.all([
+    Promise.all(['KeyLabFactory','KeyLabAccount','MainnetScenario','BscMainnetFactory'].map(artifact)),
+    Promise.all(clients.map(async rpc=>assert.equal(await rpc('eth_chainId'),'0x38','BSC mainnet chain 56 required')))
   ]);
-  for(const h of heads)assert.ok(h && /^0x[0-9a-f]+$/.test(h.number) && /^0x[0-9a-f]{64}$/.test(h.hash),'Missing finalized head');
-  const block=BigInt(heads[0].number)<=BigInt(heads[1].number)?heads[0]:heads[1],at=block.number;
-  assert.ok(heads.every(h=>/^0x[0-9a-f]+$/.test(h.timestamp) && Math.abs(Date.now()/1000-Number(BigInt(h.timestamp)))<=120),
-    'Expected recent finalized heads');
-  assert.ok(heads.every(h=>h.number!==at || h.hash===block.hash),'Finalized heads disagree');
+  assert.equal(hashBytes(setupFactory.bytecode.object),factoryPins.init,'Unexpected mainnet factory creation code');
+  assert.equal(hashBytes(setupFactory.deployedBytecode.object),factoryPins.runtime,'Unexpected mainnet factory runtime');
+  await commonFinalizedBlock(clients);
+  const setup=prepareSetupFixture();
+  const block=await commonFinalizedBlock(clients),at=block.number;
   const confirm=async rpc=>{
     const b=await rpc('eth_getBlockByNumber',[at,false]);
     assert.ok(b?.number===at && b.hash===block.hash && b.timestamp===block.timestamp,'Finalized block mismatch');
@@ -76,6 +84,7 @@ export async function rehearseMainnet(nodes=endpoints.map(url=>accountRpc(url)))
   assert.equal(factory.bytecode.object,'0x'+FACTORY_INIT,'Compiled factory differs from the client pin');
   assert.equal(account.bytecode.object,'0x'+ACCOUNT_INIT,'Compiled account differs from the client pin');
   const fixture=scenario(block,factory.bytecode.object);
+  const setupCalls=setup.encode(block,setupFactory.bytecode.object),setupHash=hashBytes(setupFactory.deployedBytecode.object);
   const expected=[factory,account].map(a=>hashBytes(a.deployedBytecode.object));
   const result=await Promise.all(clients.map(async rpc=>{
     const addresses=[fixture.driver,fixture.factory,fixture.account,fixture.recipient];await empty(rpc,addresses,at);
@@ -86,16 +95,32 @@ export async function rehearseMainnet(nodes=endpoints.map(url=>accountRpc(url)))
     const overrides={[fixture.driver]:{code:driver.deployedBytecode.object,nonce:'0x1',balance:'0x3'}};
     const data=await rpc('eth_call',[{to:fixture.driver,data:fixture.data,gas:'0xe4e1c0'},at,overrides]);
     assert.equal(data,hex(concat(...expected.map(bytes),word(2),word(1),word(1))),'Unexpected final state or runtime');
+    const setupAddresses=[setup.driver,setup.factory,setup.account,setup.recipient];
+    await empty(rpc,setupAddresses,at);
+    const factoryGas=await rpc('eth_estimateGas',[{data:setupFactory.bytecode.object},at]);
+    assert.equal(await rpc('eth_call',[{data:setupFactory.bytecode.object,gas:factoryGas},at]),setupFactory.deployedBytecode.object);
+    const stagedFactory={[setup.factory]:{code:setupFactory.deployedBytecode.object,nonce:'0x1'}};
+    const create={to:setup.factory,data:setupCalls.activation};
+    const accountGas=await rpc('eth_estimateGas',[create,at,stagedFactory]);
+    assert.equal(await rpc('eth_call',[{...create,gas:accountGas},at,stagedFactory]),hex(addressWord(setup.account)));
+    const setupDriver={[setup.driver]:{code:driver.deployedBytecode.object,nonce:'0x1',balance:'0x1'}};
+    const observed=await rpc('eth_call',[{to:setup.driver,data:setupCalls.scenario,gas:'0xe4e1c0'},at,setupDriver]);
+    assert.equal(observed,hex(concat(bytes(setupHash),bytes(expected[1]),word(1),word(1))),'Atomic setup or its rollback failed');
+    await empty(rpc,setupAddresses,at);
     await empty(rpc,addresses,at);
     await confirm(rpc);
     assert.equal(await rpc('eth_chainId'),'0x38');
     const finalized=await rpc('eth_getBlockByNumber',['finalized',false]);
     assert.ok(BigInt(finalized.number)>=BigInt(at) && (finalized.number!==at || finalized.hash===block.hash),'Finality changed');
-    return {factoryGas:BigInt(estimate).toString(),gasPriceWei:BigInt(await rpc('eth_gasPrice')).toString()};
+    return {factoryGas:BigInt(estimate).toString(),setupFactoryGas:BigInt(factoryGas).toString(),accountGas:BigInt(accountGas).toString(),gasPriceWei:BigInt(await rpc('eth_gasPrice')).toString()};
   }));
   assert.equal(result[0].factoryGas,result[1].factoryGas,'Factory estimates differ');
+  assert.equal(result[0].setupFactoryGas,result[1].setupFactoryGas,'Mainnet factory estimates differ');
+  assert.equal(result[0].accountGas,result[1].accountGas,'Atomic activation estimates differ');
   return {simulationOnly:true,chainId:56,block:at,hash:block.hash,blockTime:new Date(Number(BigInt(block.timestamp))*1000).toISOString(),
     factoryRuntimeHash:expected[0],accountRuntimeHash:expected[1],factoryGas:result[0].factoryGas,
+    atomicSetup:{factoryRuntimeHash:setupHash,factoryGas:result[0].setupFactoryGas,createAndActivateGas:result[0].accountGas,
+      bootstrapLeaf,treeLeaves:LEAVES,firstTransferLeaf:0,epoch:1,nextLeaf:1},
     gasPriceWei:result.map(r=>r.gasPriceWei),finalEpoch:2,nextLeaf:1,fixtureBalanceWei:'1',realFeeWei:'0'};
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(process.argv[1]).href){

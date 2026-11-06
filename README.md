@@ -18,7 +18,7 @@ For a disposable trial, try a [one-wei transfer in your browser](https://aurven.
 
 The [browser receipt](https://testnet.bscscan.com/tx/0x96b45367b4f3f5761610e6ee22bd168c26474e1244df998ee98155c972176a26) covers account creation, activation, funding and transfer in one transaction. The [engineering record](docs/MAINNET_READINESS.md) also includes the four individual CLI receipts and remaining release gates.
 
-The [zero-cost BSC mainnet rehearsal](docs/MAINNET_READINESS.md#bsc-mainnet-deployment-rehearsal) runs the generic factory and account against a shared finalized block using read-only RPC calls. The public wallet interface remains on testnet.
+The [zero-cost BSC mainnet rehearsal](docs/MAINNET_READINESS.md#bsc-mainnet-deployment-rehearsal) exercises the generic account and the [chain-56 atomic setup](docs/MAINNET_READINESS.md#atomic-mainnet-account-setup) against a shared finalized block using read-only RPC calls. The chain-56 factory creates and activates the predicted account in one call. The public wallet interface remains on testnet.
 
 ## Quick start
 
