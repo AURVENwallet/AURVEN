@@ -5,9 +5,27 @@
 </h1>
 <p>同步测试账户，核对状态，准备待签名交易。</p>
 <a class="activity-shortcut" href="#activity">查看交易记录 ↓</a>
+<a class="activity-shortcut" href="#testnetTrial">测试网试转 ↓</a>
 <a class="activity-shortcut" href="https://testnet.bscscan.com/tx/0x9e36f3ac70946345ed88afe3f6a6f2f76ea317bf07fb1bdb21b5053b6c34c7e2" target="_blank" rel="noopener noreferrer">在 BscScan 查看首笔测试网转账 ↗</a>
 <a id="localSetupGuide" class="activity-shortcut" href="#localSetup" hidden>前往本地账户配对 ↓</a>
 </div>
+<section id="testnetTrial" class="wallet-demo trial-panel" aria-labelledby="trialTitle">
+<div class="demo-heading"><div><p class="eyebrow">BSC TESTNET / CHAIN 97</p><h2 id="trialTitle">从浏览器转出 1 wei</h2><p>连接持有 tBNB 的测试钱包。浏览器将创建一次性智能账户，启用密钥，并在同一笔交易中向指定地址转出 1 wei。付款钱包提供本金和 Gas。</p></div></div>
+<div class="trial-form">
+<button id="trialConnect" type="button">连接测试网付款钱包</button>
+<label for="trialRecipient">收款地址<input id="trialRecipient" placeholder="0x…" maxlength="42" autocomplete="off" spellcheck="false"></label>
+<button id="trialPreview" type="button" disabled>预览本次试转</button>
+</div>
+<div id="trialReview" hidden><dl class="trial-values">
+<dt>付款钱包</dt><dd><code id="trialPayer"></code></dd><dt>收款地址</dt><dd><code id="trialTo"></code></dd>
+<dt>转账金额</dt><dd>1 wei · 0.000000000000000001 tBNB</dd><dt>请求的手续费上限</dt><dd id="trialCost"></dd>
+</dl><p>付款钱包会显示部署合约，金额为 1 wei。确认前请核对钱包显示的最终费用。</p><button id="trialSend" type="button" class="run">确认试转并打开钱包</button></div>
+<output id="trialStatus" class="demo-status" aria-live="polite">仅使用 BSC 测试网。完成后请勿向一次性智能账户充值。</output>
+<div id="trialHistory" hidden><div class="trial-form"><label for="trialRuns">此浏览器的试转记录<select id="trialRuns"></select></label>
+<button id="trialCheck" type="button">核对测试网回执</button></div>
+<label id="trialManual" for="trialHash" hidden>付款钱包里的交易哈希（可选）<input id="trialHash" placeholder="0x…" maxlength="66" autocomplete="off"></label>
+<p id="trialOutcome" aria-live="polite"></p><a id="trialExplorer" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>在 BscScan 查看交易 ↗</a></div>
+</section>
 <details id="localStart" class="local-start">
 <summary>从零开始本地试签</summary>
 <p>在自己的电脑上安装 Git、Node.js 22 或更高版本和 Foundry，然后在终端运行以下命令。</p>

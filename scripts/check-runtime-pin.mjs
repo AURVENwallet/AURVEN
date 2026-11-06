@@ -1,3 +1,11 @@
 import {pinnedRuntime} from './local-wallet-chain.mjs';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {hashBytes} from '../ui/browser-trial.js';
+import {trialInitHash} from '../ui/contract-pin.js';
 await pinnedRuntime();
-console.log('PASS: compiled BscTestAccount runtime matches the client pin.');
+const artifact=JSON.parse(await readFile(new URL('../out/BrowserTransferTrial.sol/BrowserTransferTrial.json',import.meta.url)));
+const shipped=JSON.parse(await readFile(new URL('../ui/assets/browser-trial-init.json',import.meta.url)));
+assert.equal(shipped,artifact.bytecode.object,'Shipped browser trial differs from compiled creation code');
+assert.equal(hashBytes(shipped),trialInitHash);
+console.log('PASS: compiled account runtime and browser trial creation code match their client pins.');

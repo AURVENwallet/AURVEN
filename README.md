@@ -10,7 +10,9 @@ Experimental hash-signature smart accounts for BSC, with a Chinese / English int
 
 **Local and testnet research only. Do not use with real assets. No independent security audit or validated quantum-security claim.** See [security checks and limitations](SECURITY.md).
 
-The disposable CLI completed its [first public BSC testnet transfer](https://testnet.bscscan.com/tx/0x9e36f3ac70946345ed88afe3f6a6f2f76ea317bf07fb1bdb21b5053b6c34c7e2). See the [four mined receipts, CLI instructions and release gates](docs/MAINNET_READINESS.md).
+Try a [one-wei transfer in your browser](https://aurven.site/wallet.html#testnetTrial). Connect an injected test wallet on chain 97, preview the recipient and maximum fee, then confirm the contract deployment in your payer wallet. On reload, choose the saved trial and check its receipt. The browser creates fresh, disposable account keys for each trial. Keep deposits away from completed trial accounts.
+
+The [browser receipt](https://testnet.bscscan.com/tx/0x96b45367b4f3f5761610e6ee22bd168c26474e1244df998ee98155c972176a26) covers account creation, activation, funding and transfer in one transaction. The [engineering record](docs/MAINNET_READINESS.md) also includes the four individual CLI receipts and remaining release gates.
 
 ## Quick start
 

@@ -1,6 +1,6 @@
 # Key trees, reservations and recovery
 
-The browser signs self-check messages using a separate tree and can sign a reserved transfer for simulation on disposable local Anvil. Public-testnet transaction submission and independent recovery authorization remain open. Use only disposable local/testnet keys.
+The reusable browser vault signs self-check messages using a separate tree and can sign a reserved transfer for simulation on disposable local Anvil. The separate chain-97 browser trial generates fresh identity and active trees, records each use before signing, and transfers one wei. Its signing material is discarded when the worker exits. Independent recovery authorization remains open. Use only disposable local/testnet keys.
 
 ## Tree structure
 

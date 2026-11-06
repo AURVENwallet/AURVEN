@@ -23,7 +23,7 @@ function blockValid(block){
   valid(block && QUANTITY.test(block.number) && HASH.test(block.hash) && QUANTITY.test(block.timestamp));
   return block;
 }
-function executionEvents(receipt,account){
+export function executionEvents(receipt,account){
   valid(Array.isArray(receipt.logs)&&receipt.logs.length<=4096);
   const result=[];
   for(const log of receipt.logs){

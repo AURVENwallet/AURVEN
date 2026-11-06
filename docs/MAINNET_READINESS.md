@@ -1,6 +1,14 @@
 # BSC wallet release readiness
 
-Updated 2026-11-06. A disposable command-line pilot completed a native transfer on BSC testnet (chain 97). The browser can inspect public accounts, review drafts and reserve leaves. Signed browser simulation runs on the disposable local chain. Browser submission, active-tree rotation on public testnet and device recovery remain open. The project token has a separate contract and release history.
+Updated 2026-11-06. A browser and a command-line pilot have each completed a disposable native transfer on BSC testnet (chain 97). The reusable encrypted browser vault supports draft review, durable reservations and local signed simulation. Persistent public-testnet signing from that vault, active-tree rotation on public testnet and independent device recovery remain open.
+
+## Disposable browser transfer
+
+Open [Test Wallet](https://aurven.site/wallet.html#testnetTrial) in a browser with an injected payer wallet on BSC testnet and enough faucet tBNB for gas. Connect, enter a regular recipient address and preview both addresses and the maximum fee. The payer wallet asks for one contract creation with a value of one wei. The constructor checks chain 97, creates a pinned smart account, activates a fresh tree, funds it and executes the one-wei transfer in the same transaction. A failure reverts all these steps. The browser generates the one-time keys in a disposable worker, commits each signing leaf to IndexedDB before signing and discards the keys afterwards.
+
+On 2026-11-06, Edge produced the account authorizations and a test provider backed by the dedicated faucet payer signed the outer transactions. The first public run consumed 1,716,683 gas. Its provider restricted log searches, which exposed a gap in recovery when the wallet response was lost. The next version also locates the mined payer nonce in block history. A second public run deliberately dropped the wallet reply; after reloading, the browser found the original hash and verified the receipt without another payment or a pasted hash. It consumed 1,737,498 gas and cost 0.0001737498 tBNB. Both trials returned one wei to the payer, and a second official endpoint verified both receipts. [First browser receipt](https://testnet.bscscan.com/tx/0x0570e01f2608c1f503608cc249a81c854882959b473beb32939c8c026169d05e) · [Receipt recovered after reload](https://testnet.bscscan.com/tx/0x96b45367b4f3f5761610e6ee22bd168c26474e1244df998ee98155c972176a26).
+
+Trial history keeps at most 32 records in the current browser profile. Recovery checks the original payer, nonce, value, creation data hash, canonical block, contract events and account code. A node that restricts historical reads may need the transaction hash from the payer wallet. The page only checks on request or immediately after submission. It never automatically resubmits. Clearing browser data removes local context. This release has no device recovery, further transfers from the disposable account, or verification matrix for individual wallet extensions.
 
 ## First mined testnet transfer
 
