@@ -13,6 +13,17 @@ const rekeyed=topic('Rekeyed(uint32,bytes16,bytes16)');
 const emptyHash='0x'+hex(keccak256(new Uint8Array()));
 export const digestData=data=>data==='0x'?emptyHash:hashBytes(data);
 
+// A node can expose a consumed nonce just before its transaction or receipt index catches up.
+async function retryIndexRead(read) {
+  try {return await read(true);} catch (error) {
+    if (error.message!=='NET_INDEXING') throw error;
+  }
+  await new Promise(resolve=>setTimeout(resolve,300));
+  try {return await read(false);} catch (error) {
+    if (error.message==='NET_INDEXING') throw new Error('NET_UNVERIFIED',{cause:error});
+    throw error;
+  }
+}
 function valid(ok) { requireTrial(ok,'NET_UNVERIFIED'); }
 function same(a,b) { return typeof a==='string' && typeof b==='string' && a.toLowerCase()===b.toLowerCase(); }
 function blockContains(block,hash) {
@@ -39,19 +50,30 @@ function verifyEvents(receipt,row) {
   }
 }
 
-// Reconcile public evidence only. This reader has no signer, injected wallet or vault-store dependency.
+async function receiptHead(rpc,tag='latest') {
+  const head=await rpc('eth_getBlockByNumber',[tag,false]);
+  valid(head && quantity.test(head.number) && (tag==='latest' || head.number===tag) &&
+    HASH.test(head.hash) && quantity.test(head.timestamp) && Math.abs(Date.now()/1000-Number(BigInt(head.timestamp)))<120);
+  return head;
+}
+async function latestHead(rpc) {
+  requireTrial(await rpc('eth_chainId')==='0x61','TRIAL_CHAIN');
+  return receiptHead(rpc);
+}
+
+// The receipt readers have no signer, injected wallet or encrypted vault dependency.
 export async function networkReceipt(endpoint,row,manualHash) {
   const rpc=accountRpc(endpoint,AbortSignal.timeout(45000));
-  requireTrial(await rpc('eth_chainId')==='0x61','TRIAL_CHAIN');
-  const head=await rpc('eth_getBlockByNumber',['latest',false]);
-  valid(head && quantity.test(head.number) && HASH.test(head.hash) && quantity.test(head.timestamp) &&
-    Math.abs(Date.now()/1000-Number(BigInt(head.timestamp)))<120);
+  return retryIndexRead(async()=>observe(rpc,await latestHead(rpc),row,manualHash));
+}
+async function observe(rpc,head,row,manualHash) {
   const height=BigInt(head.number);
   const submittedHash=row.submittedHash??row.hash;
   const candidate=manualHash||row.hash;
   const prior=row.lastInclusion??(row.block && row.hash?{hash:row.hash,block:row.block}:undefined);
   const result={status:'unseen',hash:row.hash,submittedHash,lastInclusion:prior,replacementHash:null,
-    moved:false,equivalent:false,block:null,gasUsed:null,feeWei:null,checkedBlock:head.number};
+    moved:false,equivalent:false,block:null,gasUsed:null,feeWei:null,checkedBlock:head.number,checkedBlockHash:head.hash,
+    replacementBlock:null,replacementBlockHash:null,reorgBlockHash:null};
   async function readBlock(number) {
     valid(quantity.test(number) && BigInt(number)<=height);
     const block=await rpc('eth_getBlockByNumber',[number,false]);
@@ -70,7 +92,8 @@ export async function networkReceipt(endpoint,row,manualHash) {
   async function isCanonical(tx) {
     if (!tx) return false;
     if (tx.blockNumber===null) { valid(tx.blockHash===null);return false; }
-    valid(HASH.test(tx.blockHash));
+    valid(quantity.test(tx.blockNumber) && HASH.test(tx.blockHash));
+    if (BigInt(tx.blockNumber)>height) return false;
     const block=await readBlock(tx.blockNumber);
     return same(block.hash,tx.blockHash) && blockContains(block,tx.hash);
   }
@@ -85,18 +108,22 @@ export async function networkReceipt(endpoint,row,manualHash) {
       let hash=await findByNonce(rpc,row,height);
       // A fork may have included the nonce before the height saved in the original preview.
       if (!hash && row.startBlock!=='0x0') hash=await findByNonce(rpc,{...row,startBlock:'0x0'},height);
+      requireTrial(hash!=null,'NET_INDEXING');
       valid(HASH.test(hash));
       mined=await getTx(hash);
+      requireTrial(mined!==null,'NET_INDEXING');
       valid(await isCanonical(mined));
     }
   }
   if (mined) {
     const receipt=await rpc('eth_getTransactionReceipt',[mined.hash]);
+    requireTrial(receipt!==null,'NET_INDEXING');
     valid(receipt && same(receipt.transactionHash,mined.hash) && same(receipt.blockHash,mined.blockHash) &&
       receipt.blockNumber===mined.blockNumber && same(receipt.from,mined.from) &&
       (mined.to===null?receipt.to===null:same(receipt.to,mined.to)) && ['0x0','0x1'].includes(receipt.status));
     if (!matchesAction(mined,row)) {
       result.status='replaced';result.replacementHash=mined.hash;
+      result.replacementBlock=mined.blockNumber;result.replacementBlockHash=mined.blockHash;
     } else {
       const ok=receipt.status==='0x1';
       if (ok) {
@@ -121,7 +148,9 @@ export async function networkReceipt(endpoint,row,manualHash) {
     const block=await readBlock(prior.block);
     // An unavailable receipt or lagging node alone cannot prove a reorganization.
     valid((prior.blockHash && !same(prior.blockHash,block.hash)) || !blockContains(block,prior.hash));
-    result.status='reorg';
+    result.status='reorg';result.reorgBlockHash=block.hash;
+  } else if (tx?.blockNumber && BigInt(tx.blockNumber)>height) {
+    result.status='waiting';
   } else if (row.kind!=='fund' && BigInt(head.timestamp)>BigInt(row.deadline)) {
     result.status='expired';
   } else if (tx?.blockNumber===null && matchesAction(tx,row)) {
@@ -130,4 +159,42 @@ export async function networkReceipt(endpoint,row,manualHash) {
   const anchor=await readBlock(head.number);
   valid(same(anchor.hash,head.hash));
   return result;
+}
+
+// Pin both reads to the same height, even if one provider is already a few blocks ahead.
+export async function compareNetworkReceipts(primary,secondary,row,manualHash) {
+  requireTrial(new URL(primary).origin!==new URL(secondary).origin,'NET_SOURCES');
+  if (manualHash) requireTrial(HASH.test(manualHash),'TRIAL_HASH');
+  const signal=AbortSignal.timeout(45000);
+  const clients=[accountRpc(primary,signal),accountRpc(secondary,signal)];
+  return retryIndexRead(first=>compareAtCommonHead(clients,row,manualHash,first));
+}
+async function compareAtCommonHead(clients,row,manualHash,first) {
+  const heads=await Promise.allSettled(clients.map(latestHead));
+  const ready=heads.map(entry=>entry.status==='fulfilled'?entry.value:null);
+  if (ready[0] && ready[1]) {
+    const lower=BigInt(ready[0].number)<=BigInt(ready[1].number)?0:1;
+    const higher=1-lower, block=ready[lower].number;
+    if (ready[higher].number!==block) {
+      try {ready[higher]=await receiptHead(clients[higher],block);} catch {ready[higher]=null;}
+    }
+    if (ready[higher] && (!same(ready[0].hash,ready[1].hash) || BigInt(ready[0].timestamp)!==BigInt(ready[1].timestamp))) {
+      return {check:{kind:'conflict',reason:'block',block}};
+    }
+  }
+  const reads=await Promise.allSettled(clients.map((rpc,i)=>ready[i]?observe(rpc,ready[i],row,manualHash):null));
+  if (first && reads.some(entry=>entry.reason?.message==='NET_INDEXING')) throw new Error('NET_INDEXING');
+  const [a,b]=reads.map(entry=>entry.status==='fulfilled'?entry.value:null);
+  if (a && b) {
+    const fields=['status','hash','checkedBlock','checkedBlockHash','block','gasUsed','feeWei','replacementHash',
+      'replacementBlock','replacementBlockHash','reorgBlockHash'];
+    const equal=(left,right)=>left===right || same(left,right);
+    const agree=fields.every(key=>equal(a[key],b[key])) && equal(a.lastInclusion?.blockHash,b.lastInclusion?.blockHash);
+    if (!agree) return {check:{kind:'conflict',reason:'observation',block:a.checkedBlock,primary:a.status,secondary:b.status}};
+    return {check:{kind:'agreed',block:a.checkedBlock},observation:a};
+  }
+  const single=a??b;
+  if (single) return {check:{kind:'single',source:a?'primary':'secondary',block:single.checkedBlock,status:single.status}};
+  if (manualHash && reads.every(entry=>entry.reason?.message==='TRIAL_HASH')) throw new Error('TRIAL_HASH');
+  return {check:{kind:'unavailable'}};
 }

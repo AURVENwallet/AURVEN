@@ -1,6 +1,6 @@
 # BSC wallet release readiness
 
-Updated 2026-11-06. An encrypted browser vault created a reusable smart account on BSC testnet (chain 97), signed two transfers, rotated to a fresh active tree, and signed a third transfer from the same address. Lost-device recovery, reorganization drills and independent security review remain open.
+Updated 2026-11-06. An encrypted browser vault created a reusable smart account on BSC testnet (chain 97), signed two transfers, rotated to a fresh active tree, and signed a third transfer from the same address. Lost-device recovery, deep reorganization drills and independent security review remain open.
 
 ## Reusable browser account
 
@@ -22,7 +22,7 @@ The browser stores up to eight account creations (including unresolved creations
 
 ## Checking interrupted and replaced payments
 
-Select an action in the reusable account's history and choose **Verify receipt**. A locked vault can check public records. The displayed block identifies when a result was last verified.
+Select an action in the reusable account's history and choose **Verify with both nodes**. A locked vault can check public records. The displayed block identifies when a result was last verified.
 
 | What the node reports | What the wallet displays |
 | --- | --- |
@@ -33,7 +33,17 @@ Select an action in the reusable account's history and choose **Verify receipt**
 | A signed action remains unmined beyond its on-chain deadline | Authorization expired as of the checked block. A plain top-up has no on-chain expiry. A mined revert is reported separately. |
 | A node is behind, lacks the required history, or changes its anchor block mid-check | The check fails. The last saved receipt stays labeled as a previous observation. |
 
-On 2026-11-06 a disposable local Anvil chain reproduced a dropped transfer, nonce replacement, a fee change that preserved the action, removal of a mined block and re-inclusion. A mobile-width Edge session reopened its history with the vault locked. After an alternative transaction consumed the payer nonce, a newly approved transfer used leaf 1; the orphaned transfer had consumed leaf 0 locally. The recipient received exactly one wei. The client also rechecked the [existing chain-97 receipt at block 141083977](https://testnet.bscscan.com/tx/0xd4375fec221a613bbe4caddc53fc04b00c6eb64214d5e5b87913b3f3e556a953) against two public nodes. These checks issued no new public payment. The UI uses a single node per check and can only classify the evidence that node supplies.
+On 2026-11-06 a disposable local Anvil chain reproduced a dropped transfer, nonce replacement, a fee change that preserved the action, removal of a mined block and re-inclusion. A mobile-width Edge session reopened its history with the vault locked. After an alternative transaction consumed the payer nonce, a newly approved transfer used leaf 1; the orphaned transfer had consumed leaf 0 locally. The recipient received exactly one wei. The client also rechecked the [existing chain-97 receipt at block 141083977](https://testnet.bscscan.com/tx/0xd4375fec221a613bbe4caddc53fc04b00c6eb64214d5e5b87913b3f3e556a953) against two public nodes. These checks issued no new public payment. The reusable account panel now queries two chain-97 endpoints for each receipt check.
+
+### Two-node receipt checks
+
+Open the [public receipt](https://aurven.site/wallet.html#publicReceipt) and select **Check public receipt** to query the two endpoints for a previously published one-wei transfer. It works without a payer or vault and does not add the example to personal history. A saved action uses the same reader.
+
+Each endpoint must report chain 97 and a recent head. The reader compares the hash and timestamp at the lower of their two heights, then verifies the observation through each endpoint at that height. For a matching mined action it compares the transaction, inclusion block, gas and fee. For a different payment at the same nonce it compares the replacement hash and inclusion block. If the nonce is consumed before a node can return the indexed transaction or its receipt, the reader retries once using fresh heads. The checked height and the transaction's inclusion height can be different.
+
+If only one endpoint completes the check, the panel identifies the responding source and displays its provisional result. A fork, conflicting transaction evidence, or an outage of both endpoints leaves the saved state intact. Refreshing after service returns reruns both checks. The current check and the earlier saved state remain distinguishable after reopening the page. A disputed account creation needs another matching check before the browser can use it.
+
+Edge and automated tests exercised different head heights, constrained history, loss of either endpoint, conflicting blocks, both endpoints offline and recovery. The browser read the published transfer at block 141083977 with both endpoints. These drills used read-only requests. The endpoints may share infrastructure. Agreement provides an additional check on the reported chain view. Payer submission, account snapshots and the old-authorization simulation still use their existing network paths. [BNB Chain endpoint list](https://docs.bnbchain.org/bnb-smart-chain/developers/json_rpc/json-rpc-endpoint/).
 
 ## Disposable browser transfer
 

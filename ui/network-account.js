@@ -2,7 +2,7 @@ import {accountRpc,readAccount} from './account-state.js';
 import {HASH} from './activity-rpc.js';
 import {previewTrial,checkBeforeSend,q,requireTrial} from './browser-trial.js';
 import {startTrial,updateTrial} from './browser-trial-store.js';
-import {networkReceipt,digestData} from './network-receipt.js';
+import {networkReceipt,compareNetworkReceipts,digestData} from './network-receipt.js';
 import {keccak256} from './lib/keccak.js';
 import {hex} from './test-wallet-core.js';
 
@@ -24,16 +24,25 @@ export async function previewNetwork(endpoint,{walletId,payer,account,kind,recip
   }
   return plan;
 }
+export function needsReceiptCheck(row) {
+  return !!row.receiptCheck && row.receiptCheck.kind!=='agreed';
+}
 // This history holds public receipts. The encrypted one-time leaf journal is separate and never pruned.
 export function retainNetworkHistory(rows,plan) {
+  if (plan.kind!=='create') {
+    const uncertainCreation=rows.some(row=>row.kind==='create' && row.account===plan.account &&
+      row.walletId===plan.walletId && needsReceiptCheck(row));
+    requireTrial(!uncertainCreation,'NET_ACCOUNT_CHECK');
+  }
   const now=Date.now()/1000;
   function removable(row) {
+    if (needsReceiptCheck(row)) return false;
     if (['declined','stopped','reverted','replaced','expired'].includes(row.status)) return true;
     if (row.status==='preparing' && row.deadline<=now) return true;
     return row.status==='included' && row.kind!=='create';
   }
   const unresolved=['requested','waiting','pending','unseen','reorg'];
-  const conflict=rows.some(row=>row.payer===plan.payer && row.nonce===plan.nonce && unresolved.includes(row.status) &&
+  const conflict=rows.some(row=>row.payer===plan.payer && row.nonce===plan.nonce && (unresolved.includes(row.status) || needsReceiptCheck(row)) &&
     (row.kind==='fund' || row.deadline>=now));
   requireTrial(!conflict,'TRIAL_IN_USE');
   if (plan.kind==='create') {
@@ -73,16 +82,18 @@ export async function submitNetwork({endpoint,store,provider,plan,authorize,wall
   }
 }
 // A slower tab cannot overwrite a later check or a wallet response received during its lookup.
-export async function reconcileNetwork(store,endpoint,id,manualHash) {
+export async function reconcileNetwork(store,endpoint,id,manualHash,secondary) {
   const token=crypto.randomUUID();
   const row=await updateTrial(store,id,old=>{
     requireTrial(!!old.dataHash,'TRIAL_STORAGE');
     return {...old,checkToken:token};
   });
-  const result=await networkReceipt(endpoint,row,manualHash);
+  const {check,observation}=secondary
+    ?await compareNetworkReceipts(endpoint,secondary,row,manualHash)
+    :{check:null,observation:await networkReceipt(endpoint,row,manualHash)};
   return updateTrial(store,id,current=>{
     requireTrial(current.checkToken===token,'NET_CHECK_AGAIN');
-    return {...current,...result,checkToken:null};
+    return {...current,...observation,receiptCheck:check,checkToken:null};
   });
 }
 

@@ -62,9 +62,12 @@ node scripts/local-wallet.mjs</code></pre>
 <button id="netPreview" type="button">预览操作</button></div>
 <div id="netReview" hidden><dl class="trial-values"><dt>操作</dt><dd id="netAction"></dd><dt>智能账户</dt><dd id="netAddress"></dd><dt>付款钱包</dt><dd id="netPayer"></dd><dt>资金去向</dt><dd id="netDestination"></dd><dt>请求的手续费上限</dt><dd id="netFee"></dd></dl><button id="netConfirm" type="button" class="run">确认并打开付款钱包</button></div>
 <output id="netStatus" class="demo-status" aria-live="polite">仅供测试网研究。备份恢复后仅可查看。</output>
-<div id="netHistory" hidden><div class="trial-form"><label>操作记录<select id="netRecords"></select></label><button id="netCheck" type="button">核对交易回执</button><button id="netOld" type="button" hidden>只读验证旧授权</button></div>
+<div id="netHistory" hidden><div class="trial-form"><label>操作记录<select id="netRecords"></select></label><button id="netCheck" type="button">双节点核对回执</button><button id="netOld" type="button" hidden>只读验证旧授权</button></div>
 <label id="netManual" hidden>付款钱包里的交易哈希（可选）<input id="netHash" placeholder="0x…" maxlength="66"></label>
 <p id="netOutcome" aria-live="polite"></p><a id="netExplorer" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>在 BscScan 查看交易 ↗</a> <a id="netReplacement" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>查看占用该序号的交易 ↗</a> <a id="netOriginal" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>查看原始付款哈希 ↗</a></div>
+<div class="public-receipt" id="publicReceipt"><div><h3>公开测试回执</h3><p>用两个测试网节点核对已发布的 1 wei 转账，无需连接钱包。</p></div>
+<div class="account-actions"><button id="netSample" type="button">核对公开回执</button><a class="activity-shortcut" href="https://testnet.bscscan.com/tx/0xd4375fec221a613bbe4caddc53fc04b00c6eb64214d5e5b87913b3f3e556a953" target="_blank" rel="noopener noreferrer">查看样例交易 ↗</a></div>
+<output id="netSampleResult" aria-live="polite"></output></div>
 </section>
 
 <section id="localSetup" class="key-vault" aria-labelledby="localSetupTitle" hidden>

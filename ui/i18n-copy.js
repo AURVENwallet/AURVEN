@@ -1,5 +1,14 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '请重新核对建户回执，两个节点一致后再继续。':'Check the account creation receipt again. Both nodes must agree before continuing.',
+  '最新账户状态（主节点）':'Latest account state (primary node)','主节点只读模拟':'Read-only simulation on the primary node',
+  '公开测试回执':'Public test receipt','用两个测试网节点核对已发布的 1 wei 转账，无需连接钱包。':'Check a published 1 wei transfer with two testnet nodes. No wallet connection is needed.',
+  '双节点核对回执':'Verify with both nodes','核对公开回执':'Check public receipt','查看样例交易 ↗':'View sample transaction ↗','正在向两个节点核对回执…':'Checking the receipt with both nodes…',
+  '两个节点核对一致':'Both nodes agree at block','仅主节点完成核对':'Only the primary node completed the check at block',
+  '仅备用节点完成核对':'Only the secondary node completed the check at block','此前保存的状态':'Previously saved status',
+  '两个节点返回不同的区块。':'The nodes returned different blocks.','两个节点对这笔交易的结果不同。':'The nodes disagree about this transaction.',
+  '两个节点均未完成核对，请稍后重试。':'Neither node completed the check. Try again later.','打包区块':'Inclusion block',
+  '暂时无法读取最新账户状态。':'The latest account state is temporarily unavailable.',
   '上次保存的回执':'Previously saved receipt','交易已打包，但执行失败。':'The transaction was mined but execution reverted.',
   '签名叶已保留。在授权有效期内，其他付款方仍可能提交原授权。':'The signing leaf stays reserved. Another payer could still submit the original authorization before it expires.',
   '付款钱包已提交，当前节点仍在等待打包。':'Submitted by the payer wallet. This node still shows it as pending.',
