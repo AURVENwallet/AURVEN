@@ -30,20 +30,20 @@ class Client{
     return deriveAccountRoot(payload,progress,partialTree);}
   dispose(){this.disposed=true;}
 }
-async function setup({store=new Store(),client=new Client(),change=()=>{}}={}){
+async function setup({store=new Store(),client=new Client(),change=()=>{},locks={request:async(name,options,action)=>action({name})}}={}){
   const derived=await deriveAccountRoot({record:store.record,key:base.key,snapshot},null,partialTree);
   let reads=0;const reader=async args=>{
     assert.equal(args.chainId,31337);assert.equal(args.account,account);
     if (reads < 2) assert.ok(args.signal);
     const current={...snapshot,root:derived.root};reads++;await change(current,reads);return current;
   };
-  const vault=new TestVault(store,{locks:{request:async(name,options,action)=>action({name})},accountReader:reader,bindingWorkerFactory:()=>client});
+  const vault=new TestVault(store,{locks,accountReader:reader,bindingWorkerFactory:()=>client.disposed ? new Client() : client});
   await vault.unlock(password);return {vault,store,client,reads:()=>reads};
 }
 const request={account,endpoint:'https://example.test/disposable-provider-marker'};
 
-async function reviewFixture(change = () => {}, overrides = {}) {
-  const instance = await setup({change: async (state, n) => {
+async function reviewFixture(change = () => {}, overrides = {}, options = {}) {
+  const instance = await setup({...options,change: async (state, n) => {
     state.balanceWei = '1000000000000000000';
     if (n > 2) await change(state);
   }});
@@ -110,12 +110,117 @@ test('canceling the review, clearing the key match or locking while the RPC is p
   }
 });
 test('a restored backup cannot pass draft preflight even with a matching root',async()=>{
-  const {vault,draft}=await reviewFixture();vault.lock();
+  const {vault,draft}=await reviewFixture();
+  const oldReport=await vault.reviewTransferDraft(draft,request.endpoint);
+  vault.lock();
   const store=new Store();
   store.record=await encryptPayload(await decryptPayload(store.record,base.key),base.key,{...store.record,mode:'recovery-readonly'});
   const recovery=await setup({store});
   assert.equal((await recovery.vault.checkAccountKeys(request)).matched,true);
-  await assert.rejects(recovery.vault.reviewTransferDraft(draft,request.endpoint),code('RECOVERY'));recovery.vault.lock();
+  await assert.rejects(recovery.vault.reviewTransferDraft(draft,request.endpoint),code('RECOVERY'));
+  await assert.rejects(recovery.vault.reserveTransferDraft(draft,request.endpoint,oldReport),code('DRAFT_REVIEW'));
+  assert.equal(recovery.vault.details.reservations,0);recovery.vault.lock();
+});
+
+class WritableStore extends Store {
+  writes = 0;
+  async compareAndSwap(expected,updated) {
+    if (this.beforeCommit) await this.beforeCommit();
+    assert.deepEqual(this.record,expected);
+    this.record = structuredClone(updated);
+    this.writes++;
+  }
+}
+
+test('a reservation binds the checked digest once and the next draft skips it after relocking',async()=>{
+  const store = new WritableStore();
+  const {vault,draft,reads} = await reviewFixture(undefined,{}, {store});
+  const {endpoint} = request;
+  await assert.rejects(vault.reserveTransferDraft(draft,endpoint),code('DRAFT_REVIEW'));
+  const report = await vault.reviewTransferDraft(draft,endpoint);
+  await assert.rejects(vault.reserveTransferDraft(draft,endpoint,{...report}),code('DRAFT_REVIEW'));
+  const result = await vault.reserveTransferDraft(draft,endpoint,report);
+  assert.equal(reads(),4);
+  assert.equal(result.revision,1);
+  assert.equal(vault.details.reservations,1);
+  await assert.rejects(vault.reserveTransferDraft(draft,endpoint,report),code('DRAFT_REVIEW'));
+  vault.lock();
+  const next = await reviewFixture(undefined,{leaf:1},{store});
+  assert.equal(await next.vault.suggestedTransferLeaf(next.draft.snapshot),1);
+  await assert.rejects(next.vault.reviewTransferDraft(draft,endpoint),code('DRAFT_LEAF'));
+  const nextReport = await next.vault.reviewTransferDraft(next.draft,endpoint);
+  await next.vault.reserveTransferDraft(next.draft,endpoint,nextReport);
+  const {journal} = await decryptPayload(store.record,base.key);
+  assert.deepEqual(journal.map(row=>[row.leaf,row.digest]),[[0,draft.digest],[1,next.draft.digest]]);
+  assert.deepEqual(journal[0],{chainId:draft.chainId,account,epoch:draft.epoch,root:draft.snapshot.root.slice(2),
+    pubSeed:draft.snapshot.pubSeed.slice(2),leaf:0,digest:draft.digest});
+  next.vault.lock();
+});
+
+test('reservation rechecks the observed balance, counter and review block before writing',async()=>{
+  for (const [changes,reason] of [[{balanceWei:'0'},'DRAFT_BALANCE'],[{next:1},'DRAFT_STALE'],[{blockNumber:'0x1'},'DRAFT_STALE']]) {
+    const store = new WritableStore();
+    let reads = 0;
+    const {vault,draft} = await reviewFixture(state=>{
+      state.blockNumber = '0x2';
+      if (++reads === 2) Object.assign(state,changes);
+    },{}, {store});
+    const report = await vault.reviewTransferDraft(draft,request.endpoint);
+    await assert.rejects(vault.reserveTransferDraft(draft,request.endpoint,report),code(reason));
+    assert.equal(store.writes,0);
+    vault.lock();
+  }
+});
+
+test('a second tab cannot reserve a competing digest during or after the first write',async()=>{
+  const entered = deferred(), release = deferred(), store = new WritableStore();
+  const locks = {held:false,async request(name,options,action) {
+    if (this.held) return action(null);
+    this.held = true;
+    try {return await action({name});} finally {this.held = false;}
+  }};
+  const a = await reviewFixture(undefined,{}, {store,locks});
+  const b = await reviewFixture(undefined,{amount:'0.1'}, {store,locks});
+  const first = await a.vault.reviewTransferDraft(a.draft,request.endpoint);
+  const second = await b.vault.reviewTransferDraft(b.draft,request.endpoint);
+  store.beforeCommit = ()=>{entered.resolve();return release.promise;};
+  const pending = a.vault.reserveTransferDraft(a.draft,request.endpoint,first);
+  await entered.promise;
+  await assert.rejects(b.vault.reserveTransferDraft(b.draft,request.endpoint,second),code('BUSY'));
+  release.resolve(); await pending;
+  await assert.rejects(b.vault.reviewTransferDraft(b.draft,request.endpoint),code('DRAFT_LEAF'));
+  assert.equal(store.writes,1);a.vault.lock();b.vault.lock();
+});
+
+test('a lock during commit keeps the leaf consumed and a failed storage write cannot return success',async()=>{
+  for (const mode of ['locked','failure']) {
+    const store = new WritableStore();
+    const {vault,draft} = await reviewFixture(undefined,{}, {store});
+    const report = await vault.reviewTransferDraft(draft,request.endpoint);
+    store.beforeCommit = ()=>{
+      if (mode==='failure') throw new VaultError('STORAGE');
+      vault.lock();
+    };
+    await assert.rejects(vault.reserveTransferDraft(draft,request.endpoint,report),code(mode==='failure'?'STORAGE':'LOCKED'));
+    assert.equal(vault.unlocked,false);
+    assert.equal(store.writes,mode==='failure'?0:1);
+    const {journal} = await decryptPayload(store.record,base.key);
+    assert.equal(journal.length,store.writes);
+  }
+});
+
+test('reservations reject changed payloads, old sessions and the rotation-only leaf range',async()=>{
+  const store = new WritableStore();
+  const {vault,draft} = await reviewFixture(undefined,{}, {store});
+  let report = await vault.reviewTransferDraft(draft,request.endpoint);
+  await assert.rejects(vault.reserveTransferDraft({...draft,valueWei:'2'},request.endpoint,report),code('DRAFT_DIGEST'));
+  report = await vault.reviewTransferDraft(draft,request.endpoint);
+  vault.cancelAccountCheck();await vault.checkAccountKeys(request);
+  await assert.rejects(vault.reserveTransferDraft(draft,request.endpoint,report),code('DRAFT_REVIEW'));
+  await vault.reserveLeaf({chainId:31337,account,epoch:1,pubSeed:draft.snapshot.pubSeed.slice(2),root:draft.snapshot.root.slice(2),leaf:959,digest:'aa'.repeat(16)});
+  await assert.rejects(vault.suggestedTransferLeaf(draft.snapshot),code('DRAFT_EXHAUSTED'));
+  await assert.rejects(vault.reviewTransferDraft(draft,request.endpoint),code('DRAFT_EXHAUSTED'));
+  assert.equal(store.writes,1);vault.lock();
 });
 
 test('root check validates pinned contract, test network and complete snapshot context',()=>{

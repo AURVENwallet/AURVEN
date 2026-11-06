@@ -6,6 +6,8 @@ const el=id=>document.getElementById(id);
 const status=el('vaultStatus');
 let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
+  DRAFT_REVIEW:'请先重新复核当前草稿，再预留叶号。',
+  DRAFT_EXHAUSTED:'这棵树的交易叶已用尽，请先换根。',
   DRAFT_SOURCE:'请使用链上同步模式重新生成草稿。',
   DRAFT_FORMAT:'草稿字段无效，请重新生成。',
   DRAFT_DIGEST:'交易内容与草稿摘要不符，请重新生成。',
@@ -94,14 +96,21 @@ function renderAccountCheck(){
 }
 function notifyKeyChange(){document.dispatchEvent(new Event('aurven:key-check-cleared'));}
 function clearAccountCheck(){vault?.cancelAccountCheck();notifyKeyChange();renderAccountCheck();}
-export async function reviewTransferDraft(draft,endpoint,signal) {
+async function draftAction(action) {
   try {
     if (!vault?.unlocked) throw {code:'LOCKED'};
-    return await vault.reviewTransferDraft(draft,endpoint,signal);
+    return await action(vault);
   } catch (error) {
     throw new Error(errors[error.code] ?? '草稿复核失败，请检查测试网络和节点后重试。');
+  } finally {
+    render();
   }
 }
+export const walletDraftActions = {
+  review:(draft,endpoint,signal)=>draftAction(v=>v.reviewTransferDraft(draft,endpoint,signal)),
+  reserve:(draft,endpoint,report,signal)=>draftAction(v=>v.reserveTransferDraft(draft,endpoint,report,signal)),
+  nextLeaf:state=>vault?.unlocked ? draftAction(v=>v.suggestedTransferLeaf(state)) : state.next
+};
 el('accountKeyForm').addEventListener('input',()=>{
   clearAccountCheck();el('accountKeyStatus').textContent='信息已修改，请重新核验。';
 });

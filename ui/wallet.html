@@ -72,7 +72,7 @@
 <div>
 <label>TRANSACTION BUILDER</label>
 <h2>准备测试转账</h2>
-<p>输入测试账户与收款信息，计算待签名摘要。账户和叶号需与链上状态一致。</p>
+<p>输入测试账户、收款地址和金额。链上模式会读取账户，已匹配的密钥库会跳过本机预留的叶号。</p>
 <form id="transferForm">
 <label>网络<select name="chain">
 <option value="97">BSC Testnet · 97</option>
@@ -121,13 +121,17 @@
 <label>TRANSACTION REVIEW</label>
 <h2>交易预览</h2>
 <output id="transferResult" aria-live="polite">填写交易信息后查看结果。</output>
-<p>链上模式使用区块时间计算 10 分钟有效期。草稿包含状态快照，叶号预留和签名将在后续接入。</p>
+<p>链上草稿从读取的区块时间起 10 分钟内有效。导出的草稿包含收款地址、金额和叶号。</p>
 <button id="exportTransfer" disabled>导出交易草稿</button>
 <div class="draft-review" id="draftReview">
 <button id="reviewDraft" type="button" disabled>复核当前草稿</button>
 <p>先核验账户密钥，再用链上同步模式生成草稿。复核会检查收款信息、余额、有效期和本机使用过的叶号。</p>
 <a href="#accountBinding">前往账户密钥核验</a>
 <output aria-live="polite"><span id="reviewStatus"></span><b id="reviewBlock"></b></output>
+<div id="reservePanel" hidden>
+<p id="reserveHelp">预留会在本机密钥库中永久占用这个叶号，即使草稿过期也不会释放。此操作不会签名或发送交易。</p>
+<button id="reserveDraft" type="button" aria-describedby="reserveHelp">为此草稿预留叶号</button>
+</div>
 </div>
 </div>
 </section>

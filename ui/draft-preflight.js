@@ -21,7 +21,7 @@ export function validateReviewDraft(draft) {
   const original = draft.snapshot;
   if (!original || original.codeHash !== accountCodeHash || original.chainId !== draft.chainId ||
       typeof original.account !== 'string' || original.account.toLowerCase() !== draft.account.toLowerCase() ||
-      original.epoch !== draft.epoch || original.next !== draft.leaf ||
+      original.epoch !== draft.epoch || !Number.isInteger(original.next) || original.next < 0 || original.next > draft.leaf ||
       !/^0x[0-9a-f]{32}$/.test(original.root) || !/^0x[0-9a-f]{32}$/.test(original.pubSeed) ||
       !/^0x[0-9a-f]{64}$/.test(original.blockHash) || !/^0x[0-9a-f]{1,64}$/.test(original.blockNumber)) fail('DRAFT_FORMAT');
   const calls = [{to: draft.recipient, value: BigInt(draft.valueWei), data: new Uint8Array()}];
@@ -29,17 +29,30 @@ export function validateReviewDraft(draft) {
   if (hex(digest) !== draft.digest) fail('DRAFT_DIGEST');
 }
 
-export function compareDraftState(draft, state, binding, journal) {
+export function nextTransferLeaf(state, journal) {
+  let next = state.next;
+  const root = state.root.slice(2), pubSeed = state.pubSeed.slice(2);
+  for (const row of journal) {
+    if (row.root === root && row.pubSeed === pubSeed) next = Math.max(next, row.leaf + 1);
+  }
+  if (next >= 960) fail('DRAFT_EXHAUSTED');
+  return next;
+}
+
+export function compareDraftState(draft, state, binding, journal, reviewed) {
   const original = draft.snapshot;
   if (!binding?.matched || binding.chainId !== draft.chainId || binding.account !== draft.account.toLowerCase() ||
       binding.snapshot.epoch !== state.epoch || binding.derivedRoot !== state.root || binding.derivedPubSeed !== state.pubSeed) fail('DRAFT_KEYS');
   const head = BigInt(state.blockNumber);
-  const inconsistentBlock = [original,binding.snapshot].some(snapshot =>
+  const observations = reviewed ? [original,binding.snapshot,reviewed] : [original,binding.snapshot];
+  const inconsistentBlock = observations.some(snapshot =>
     head < BigInt(snapshot.blockNumber) || (head === BigInt(snapshot.blockNumber) && state.blockHash !== snapshot.blockHash));
   if (inconsistentBlock || original.root !== state.root || original.pubSeed !== state.pubSeed ||
-      draft.epoch !== state.epoch || draft.leaf !== state.next) fail('DRAFT_STALE');
+      draft.epoch !== state.epoch || original.next !== state.next) fail('DRAFT_STALE');
   if (draft.deadline <= state.timestamp || draft.deadline > state.timestamp + 3600) fail('DRAFT_DEADLINE');
   if (!uint256(state.balanceWei) || BigInt(state.balanceWei) < BigInt(draft.valueWei)) fail('DRAFT_BALANCE');
   // The local journal may be ahead even when an RPC has never seen the signature.
-  if (journal.some(row => row.pubSeed === state.pubSeed.slice(2) && row.root === state.root.slice(2) && row.leaf >= draft.leaf)) fail('DRAFT_LEAF');
+  const next = nextTransferLeaf(state,journal);
+  if (draft.leaf < next) fail('DRAFT_LEAF');
+  if (draft.leaf > next) fail('DRAFT_STALE');
 }

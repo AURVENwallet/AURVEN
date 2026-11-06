@@ -9,7 +9,7 @@ The checks below are a pre-publication record, not a production security certifi
 | Check | Result / scope |
 | --- | --- |
 | Solidity tests | 43 passed, including chain restrictions, tampering, replay, expiry, rotation, interoperability and multisig behavior. |
-| Client and UI tests | 105 tests as of 2026-11-06. Coverage includes account snapshots, transfer validation, flow simulation, signing reservations, receipt validation, localization, the encrypted vault, verification-only worker signing, offline proof verification, persistent read-only transaction tracking, account key-root comparison and unsigned draft review. Compile contracts before running client tests. |
+| Client and UI tests | 110 tests as of 2026-11-06. Coverage includes account snapshots, transfer validation, flow simulation, signing reservations, receipt validation, localization, the encrypted vault, verification-only worker signing, offline proof verification, persistent read-only transaction tracking, account key-root comparison, unsigned draft review and durable draft reservations. Compile contracts before running client tests. |
 | Reproducible source | A clean staged-source copy builds and passes contract tests. Solidity source bytes are preserved by .gitattributes because metadata contributes to the pinned runtime hash. |
 | Runtime pin | Compiled BscTestAccount checked against ui/contract-pin.js. |
 | Secret scan | Gitleaks 8.30.1 scanned the public source snapshot with redacted output; no findings in that scan. Tool archive SHA-256 was checked against the official release checksums. |
@@ -22,7 +22,7 @@ Scanner: [Gitleaks 8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.
 
 ## Known limitations
 
-- **Unsigned draft review.** A result applies to the RPC block shown and the authenticated journal read from the active vault. Another device may have signed offline, the chain may reorganize, or a different tab may reserve the leaf afterwards. A future transaction signer must recheck state and commit its own reservation before releasing a signature.
+- **Draft review and reservation.** A review applies to the observed block and active local journal. Reserving consumes the current session's review, rechecks account state and commits the exact digest under a Web Lock using strict IndexedDB compare-and-swap. A future transaction signer must revalidate the live state and establish one-time proof release for the reserved digest. An exported reservation flag cannot authorize signing. Chain reorganization and offline use by another device remain outside the local journal's view.
 
 - **Cryptography:** the custom stateful WOTS/Merkle scheme uses 16-byte elements. Its parameters and quantum-security bounds require specialist evaluation. No security level is asserted here.
 - **One-time keys:** a leaf must never sign two different digests. The disposable demo journals before returning signatures. The browser vault adds strict IndexedDB transactions, cross-tab Web Locks and compare-and-swap. Its verification-only message signer commits a reservation before sending the worker a sign command, validates the returned context and independently checks the proof. Account transaction signing is still not connected. No vault entry is reclaimed after a failed or reverted transaction. Each demo script invocation still creates fresh keys rather than resuming an old run.

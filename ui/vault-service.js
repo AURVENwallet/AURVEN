@@ -4,13 +4,13 @@ import {hex} from './vault-crypto.js';
 import {ProofWorkerClient} from './proof-worker-client.js';
 import {LOCAL_PROOF_FORMAT,PROOF_ACCOUNT,validateProofMessage,proofDigest,verifyLocalProof,proofTreeState} from './local-proof.js';
 import {readAccount} from './account-state.js';
-import {validateReviewDraft,compareDraftState} from './draft-preflight.js';
+import {validateReviewDraft,compareDraftState,nextTransferLeaf} from './draft-preflight.js';
 import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
 
 export class TestVault {
   #key;#walletId;#revision=0;#generation=0;#timer;#deadline=0;#details=null;#observed=new Map();
   #proofWorker;#proofTree;#proofGeneration=0;
-  #bindingWorker;#bindingAbort;#bindingGeneration=0;#bindingResult;
+  #bindingWorker;#bindingAbort;#bindingGeneration=0;#bindingResult;#reviewTicket;
   constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
     bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount}={}){
     if(!locks?.request||!Number.isFinite(idleMs)||idleMs<=0)fail('UNSUPPORTED');
@@ -186,7 +186,28 @@ export class TestVault {
     });
   }
   get accountCheck(){return this.unlocked&&this.#bindingResult?structuredClone(this.#bindingResult):null;}
+  async suggestedTransferLeaf(snapshot) {
+    const binding = this.accountCheck;
+    if (!binding?.matched || this.#details.mode !== 'active' || binding.chainId !== snapshot.chainId ||
+        binding.account !== snapshot.account.toLowerCase() || binding.snapshot.epoch !== snapshot.epoch ||
+        binding.derivedRoot !== snapshot.root || binding.derivedPubSeed !== snapshot.pubSeed) return snapshot.next;
+    const state = validateKeySnapshot(snapshot,binding.chainId,binding.account);
+    const context = this.#capture();
+    return this.#exclusive(async () => {
+      const {payload} = await this.#load(context);
+      return nextTransferLeaf(state,payload.journal);
+    });
+  }
   async reviewTransferDraft(input, endpoint, signal) {
+    this.#reviewTicket = undefined;
+    return this.#checkTransferDraft(input,endpoint,signal);
+  }
+  async reserveTransferDraft(input, endpoint, reviewed, signal) {
+    if (!reviewed || reviewed !== this.#reviewTicket || reviewed.digest !== input?.digest) fail('DRAFT_REVIEW');
+    this.#reviewTicket = undefined;
+    return this.#checkTransferDraft(input,endpoint,signal,reviewed);
+  }
+  async #checkTransferDraft(input, endpoint, signal, reviewed) {
     const context = this.#capture();
     const draft = structuredClone(input);
     validateReviewDraft(draft);
@@ -209,21 +230,39 @@ export class TestVault {
         if (record.mode !== 'active') fail('RECOVERY');
         if (payload.journal.length >= MAX_RESERVATIONS) fail('FULL');
         const state = validateKeySnapshot(raw,draft.chainId,account);
-        compareDraftState(draft,{...state,balanceWei:raw.balanceWei},binding,payload.journal);
-        return {digest:draft.digest, leaf:draft.leaf, blockNumber:state.blockNumber, blockHash:state.blockHash};
+        compareDraftState(draft,{...state,balanceWei:raw.balanceWei},binding,payload.journal,reviewed);
+        const report = Object.freeze({digest:draft.digest, leaf:draft.leaf, blockNumber:state.blockNumber, blockHash:state.blockHash});
+        if (!reviewed) {
+          this.#reviewTicket = report;
+          return report;
+        }
+        payload.journal.push(validateReservation({chainId:draft.chainId, account, epoch:state.epoch,
+          pubSeed:state.pubSeed.slice(2), root:state.root.slice(2), leaf:draft.leaf, digest:draft.digest}));
+        const updated = await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
+        current();
+        await this.store.compareAndSwap(record,updated);
+        // A completed write stays consumed even if the caller canceled during the transaction.
+        this.#check(context);
+        this.#remember(updated);
+        this.#revision = updated.revision;
+        this.#setDetails(updated,payload);
+        current();
+        return {...report,revision:updated.revision};
       } catch (error) {
-        if (['AUTH_FAILED','FORMAT','MISSING','ROLLBACK','STORAGE'].includes(error.code)) this.lock('storage');
+        if (!(error instanceof VaultError) || ['AUTH_FAILED','FORMAT','MISSING','ROLLBACK','STORAGE','CONFLICT','UNSUPPORTED'].includes(error.code)) this.lock('storage');
         throw error;
       }
     });
   }
   cancelAccountCheck(){
+    this.#reviewTicket=undefined;
     this.#bindingGeneration++;this.#bindingAbort?.abort();this.#bindingAbort=undefined;
     this.#bindingWorker?.dispose();this.#bindingWorker=undefined;this.#bindingResult=undefined;
   }
   async checkAccountKeys({endpoint,account},progress){
     const context=this.#capture();
     if(this.#bindingAbort)fail('BUSY');
+    this.#reviewTicket=undefined;
     this.#bindingResult=undefined;
     account=typeof account==='string'?account.trim().toLowerCase():'';
     if(!/^0x[0-9a-f]{40}$/.test(account))fail('KEY_CONTEXT');

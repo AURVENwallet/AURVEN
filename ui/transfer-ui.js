@@ -13,44 +13,77 @@ let confirmedAccount;
 let verifiedDemo;
 let demoLoading=false;
 let trackingState;
-let reviewDraft;
+let draftActions;
+let reviewReport;
+let reserving = false;
 let reviewController;
 
 function clearReview() {
   reviewController?.abort();
   reviewController = undefined;
+  reviewReport = undefined;
+  const interrupted = reserving;
+  if (interrupted) {
+    reserving = false;
+    draft = undefined;
+    get('exportTransfer').disabled = true;
+  }
+  get('reservePanel').hidden = true;
   get('reviewBlock').textContent = '';
-  get('reviewStatus').textContent = '';
-  get('reviewDraft').disabled = !(reviewDraft && draft?.stateSource === 'rpc-snapshot');
+  get('reviewStatus').textContent = interrupted ? '预留结果待核对，请解锁后重新生成草稿。' :
+    draft?.leafReserved ? '叶号已为此摘要永久预留。可导出未签名草稿。' : '';
+  get('reviewDraft').disabled = !(draftActions && draft?.stateSource === 'rpc-snapshot' && !draft.leafReserved);
 }
 
-export function connectDraftReview(check) {
-  reviewDraft = check;
+export function connectDraftReview(actions) {
+  draftActions = actions;
   clearReview();
   document.addEventListener('aurven:key-check-cleared',clearReview);
 }
 
-get('reviewDraft').onclick = async () => {
-  if (!draft || !reviewDraft || reviewController) return;
+async function checkOrReserve(reserve) {
+  if (!draft || draft.leafReserved || !draftActions || reviewController || (reserve && !reviewReport)) return;
   const request = new AbortController();
   reviewController = request;
+  const previous = reviewReport;
+  reviewReport = undefined;
+  reserving = reserve;
+  get('reservePanel').hidden = true;
+  get('exportTransfer').disabled = reserve;
   get('reviewDraft').disabled = true;
   get('reviewBlock').textContent = '';
-  get('reviewStatus').textContent = '正在复核草稿和密钥使用记录…';
+  get('reviewStatus').textContent = reserve ? '正在重新核对并保存叶号…' : '正在复核草稿和密钥使用记录…';
   try {
-    const result = await reviewDraft(draft,field('rpc').value.trim(),request.signal);
+    const endpoint = field('rpc').value.trim();
+    const result = reserve
+      ? await draftActions.reserve(draft,endpoint,previous,request.signal)
+      : await draftActions.review(draft,endpoint,request.signal);
     if (request.signal.aborted) return;
-    get('reviewStatus').textContent = '草稿在此区块通过复核，叶号尚未预留。';
+    if (reserve) {
+      draft = {...draft,leafReserved:true};
+      get('reviewStatus').textContent = '叶号已为此摘要永久预留。可导出未签名草稿。';
+    } else {
+      reviewReport = result;
+      get('reservePanel').hidden = false;
+      get('reviewStatus').textContent = '草稿在此区块通过复核，叶号尚未预留。';
+    }
     get('reviewBlock').textContent = ' #' + BigInt(result.blockNumber);
   } catch (error) {
-    if (!request.signal.aborted) get('reviewStatus').textContent = error.message;
+    if (!request.signal.aborted) {
+      if (reserve) draft = undefined;
+      get('reviewStatus').textContent = error.message;
+    }
   } finally {
     if (reviewController === request) {
       reviewController = undefined;
-      get('reviewDraft').disabled = false;
+      reserving = false;
+      get('reviewDraft').disabled = !draft || draft.leafReserved;
+      get('exportTransfer').disabled = !draft;
     }
   }
-};
+}
+get('reviewDraft').onclick = () => checkOrReserve(false);
+get('reserveDraft').onclick = () => checkOrReserve(true);
 
 // A public host has no access to the visitor's locally generated demo record.
 // Keep the complete signed-demo flow on the visitor's own loopback preview.
@@ -170,11 +203,14 @@ form.onsubmit = async event => {
     if (field('source').value === 'chain' && !state?.ready) {
       throw new Error('请先完成换根，再准备交易');
     }
+    const selectedLeaf = state && draftActions ? await draftActions.nextLeaf(state) : Number(field('leaf').value);
+    if (requestVersion !== version) return;
+    field('leaf').value = selectedLeaf;
     const transaction = prepareTransfer({
       account: field('account').value.trim(), recipient: field('recipient').value.trim(),
       amount: field('amount').value.trim(), chainId: Number(field('chain').value),
       epoch: state?.epoch ?? Number(field('epoch').value),
-      leaf: state?.next ?? Number(field('leaf').value),
+      leaf: selectedLeaf,
       deadline: (state?.timestamp ?? Math.floor(Date.now() / 1000)) + 600,
       randomizer: crypto.getRandomValues(new Uint8Array(16))
     });
@@ -192,7 +228,7 @@ form.onsubmit = async event => {
       '叶号　' + transaction.leaf + '　代数　' + transaction.epoch,
       '截止时间　' + new Date(transaction.deadline * 1000).toLocaleString(),
       '签名摘要　' + transaction.digest,
-      state ? '已按链上快照生成草稿。签名前仍需预留叶号。' : '离线草稿使用手动状态，签名前须同步账户。'
+      state ? '已按链上快照生成未签名草稿。' : '离线草稿使用手动状态，签名前须同步账户。'
     ].join('\n\n');
     get('exportTransfer').disabled = false;
     clearReview();

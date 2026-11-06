@@ -1,4 +1,4 @@
 import {connectDraftReview} from './transfer-ui.js';
-import {reviewTransferDraft} from './vault-ui.js';
+import {walletDraftActions} from './vault-ui.js';
 
-connectDraftReview(reviewTransferDraft);
+connectDraftReview(walletDraftActions);

@@ -49,6 +49,12 @@ The sections below document successive implementation stages. Test counts and pe
 
 A successful result identifies the observed block. Editing the draft or locking the vault clears the result. A restored backup can compare roots but cannot pass this check because its journal may be outdated. The review makes no reservation, signature or transaction. Account state can change after the check, and the journal only covers this vault.
 
+After a successful check, **Reserve the leaf for this draft** permanently assigns the selected leaf to the displayed digest in this vault. The wallet reads the account again and checks the encrypted journal under an exclusive lock before committing. The unsigned export sets `leafReserved` to `true` only after the write completes. This field describes local state and cannot serve as proof of a reservation to another device.
+
+An expired or abandoned draft still consumes its reserved leaf. When the active vault matches the account, generating the next draft selects the greater of the on-chain counter and one beyond the highest leaf recorded for the same tree. After leaf 959, a new root is required for transfers. Browser transaction signing and submission remain separate work.
+
+Browser acceptance used an isolated Edge profile and a disposable local Anvil account. It exercised the English wallet form, full key-root check, review and reserve buttons, rapid duplicate clicks, unsigned JSON export, selection of leaf 1 after reserving leaf 0, clearing approval on edits and the reservation count after a reload.
+
 ## Account key-root comparison (2026-11-05)
 
 Test Wallet now checks whether its unlocked test vault can reconstruct an existing account's key root. Enter a test account and RPC in **Does this key match this account?**, or sync an account below and choose **Check key match**. The vault determines the network. The checker verifies the deployed account version, rebuilds all 1,024 leaves in a separate worker and reads the account again afterward. A changed epoch, public seed, root or next-leaf counter invalidates the check. Matching and non-matching roots are shown explicitly, with the checked block and time.
