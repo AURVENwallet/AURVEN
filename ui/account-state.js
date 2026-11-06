@@ -16,12 +16,10 @@ export function rpcEndpoint(value) {
   return url.href;
 }
 
-export async function readAccount({endpoint, account, chainId, signal}) {
-  addressBytes(account);
-  if (![97, 31337].includes(chainId)) throw new Error('仅支持 BSC 测试网和本地链');
+export function accountRpc(endpoint, signal) {
   const url = rpcEndpoint(endpoint);
   let requestId = 0;
-  async function rpc(method, params = []) {
+  return async function rpc(method, params = []) {
     const id = ++requestId;
     const response = await fetch(url, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -35,7 +33,13 @@ export async function readAccount({endpoint, account, chainId, signal}) {
       throw new Error('RPC 未返回有效结果（' + method + '）');
     }
     return payload.result;
-  }
+  };
+}
+
+export async function readAccount({endpoint, account, chainId, signal}) {
+  addressBytes(account);
+  if (![97, 31337].includes(chainId)) throw new Error('仅支持 BSC 测试网和本地链');
+  const rpc = accountRpc(endpoint,signal);
   if (await rpc('eth_chainId') !== '0x' + chainId.toString(16)) {
     throw new Error('RPC 链号与所选网络不同');
   }

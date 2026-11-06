@@ -23,7 +23,7 @@ node --test test/*.test.mjs
 python -m http.server 8937 --bind 127.0.0.1 --directory ui
 ```
 
-Open http://127.0.0.1:8937/ . Use the **Chinese / EN** language selector in the header; the choice persists between pages and reloads. Switching languages preserves form input, proof results and simulation progress. Exported protocol data stays language-independent. The optional Test Wallet vault stores a newly generated test seed locally in encrypted form. It supports verification-only browser signatures; account transaction signing is not connected.
+Open http://127.0.0.1:8937/ . Use the **Chinese / EN** language selector in the header; the choice persists between pages and reloads. Switching languages preserves form input, proof results and simulation progress. Exported protocol data stays language-independent. The optional Test Wallet vault stores a newly generated test seed locally in encrypted form. It supports message self-checks and one-shot signed transfer simulations on loopback Anvil.
 
 For the local wallet demo, start a separate local chain, then run the demo in another terminal:
 
@@ -41,6 +41,21 @@ The demo creates fresh disposable keys and a new account on your own machine. Op
 
 The sections below document successive implementation stages. Test counts and pending work in a stage describe that stage; see [SECURITY.md](SECURITY.md) for the release-check summary and known limitations.
 
+## Simulate a signed transfer on local Anvil
+
+For a self-contained check, build the contracts and run the integration test from the repository root.
+
+```sh
+forge build
+node --test test/local-simulation.test.mjs
+```
+
+The test starts a disposable Anvil process on a free loopback port, generates a fresh vault, and installs the pinned account runtime with a matching test root. It reviews and reserves one transfer, checks that the Solidity contract accepts the signature, then changes one byte of the proof and checks that the contract rejects it. It verifies the account balance, recipient balance, block and leaf counter after simulation. The fixture exists only for the duration of the test.
+
+To use the wallet page with your own matching **active test vault and Anvil account**, select chain 31337 and a loopback HTTP RPC, check the key match, prepare the transfer and reserve its leaf. Choose **Sign and simulate locally**. The node receives executable signed calldata in a read-only `eth_call` at the displayed block. Use a local node you control. The page returns the result and block number. This step has no signed download or broadcast action.
+
+The attempt is single-use. Reloading or locking clears the in-memory permission. Expiry, interruption or node rejection leaves the reservation consumed. Prepare a fresh draft to try again. Imported backups remain read-only. Chain 97 supports review and reservation only.
+
 ## Review an unsigned transfer draft (2026-11-06)
 
 1. Open [Test Wallet](https://aurven.site/wallet.html). Unlock the active vault associated with your deployed local or BSC testnet account. Choose **Check key match** for that account.
@@ -51,7 +66,7 @@ A successful result identifies the observed block. Editing the draft or locking 
 
 After a successful check, **Reserve the leaf for this draft** permanently assigns the selected leaf to the displayed digest in this vault. The wallet reads the account again and checks the encrypted journal under an exclusive lock before committing. The unsigned export sets `leafReserved` to `true` only after the write completes. This field describes local state and cannot serve as proof of a reservation to another device.
 
-An expired or abandoned draft still consumes its reserved leaf. When the active vault matches the account, generating the next draft selects the greater of the on-chain counter and one beyond the highest leaf recorded for the same tree. After leaf 959, a new root is required for transfers. Browser transaction signing and submission remain separate work.
+An expired or abandoned draft still consumes its reserved leaf. When the active vault matches the account, generating the next draft selects the greater of the on-chain counter and one beyond the highest leaf recorded for the same tree. After leaf 959, a new root is required for transfers. For a fresh local Anvil reservation, continue with **Sign and simulate locally**. BSC testnet signing and submission remain pending.
 
 Browser acceptance used an isolated Edge profile and a disposable local Anvil account. It exercised the English wallet form, full key-root check, review and reserve buttons, rapid duplicate clicks, unsigned JSON export, selection of leaf 1 after reserving leaf 0, clearing approval on edits and the reservation count after a reload.
 

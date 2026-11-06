@@ -36,7 +36,12 @@ export function parseBackup(text){
   try{return validateEnvelope(JSON.parse(text));}catch{fail('FORMAT');}
 }
 export function validateReservation(row){
-  if(!keys(row,['chainId','account','epoch','pubSeed','root','leaf','digest'])||
+  const fields=['chainId','account','epoch','pubSeed','root','leaf','digest'];
+  if(row && Object.hasOwn(row,'simulationAttempt')){
+    fields.push('simulationAttempt');
+    if(row.simulationAttempt!==true || row.chainId!==31337 || row.epoch<1 || row.leaf>=960)fail('RESERVATION');
+  }
+  if(!keys(row,fields)||
     ![97,31337].includes(row.chainId)||typeof row.account!=='string'||!/^0x[0-9a-f]{40}$/.test(row.account)||
     !Number.isInteger(row.epoch)||row.epoch<0||row.epoch>4294967295||
     !Number.isInteger(row.leaf)||row.leaf<0||row.leaf>=1024||

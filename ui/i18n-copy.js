@@ -1,5 +1,12 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '本地试签仅支持本机 Anvil 节点和链号 31337。':'Test signing requires a loopback Anvil node on chain 31337.',
+  '此预留已不可用于试签。请生成新草稿并重新预留。':'This reservation cannot start a signing attempt. Prepare and reserve a new draft.',
+  '本地合约模拟未通过。叶号仍已占用，请重新生成草稿。':'Local contract simulation failed. The leaf stays used. Prepare a new draft.',
+  '正在本地生成签名并模拟合约执行…':'Signing locally and simulating contract execution…',
+  '合约已在此区块接受签名并完成模拟。模拟未发送交易。':'The contract accepted the signature in simulation at this block. No transaction was sent.',
+  '仅用于本机 Anvil。点击后会用已预留的叶号签名，并把可执行的签名交给你选择的本机节点模拟一次。刷新或锁定后需新建草稿。':'Local Anvil only. This signs with the reserved leaf and passes an executable authorization to your selected local node for one simulation. After a reload or lock, prepare a new draft.',
+  '试签并模拟执行':'Sign and simulate locally',
   '为此草稿预留叶号':'Reserve the leaf for this draft',
   '预留会在本机密钥库中永久占用这个叶号，即使草稿过期也不会释放。此操作不会签名或发送交易。':'Reserving permanently uses this leaf in your local vault, even if the draft expires. The transaction stays unsigned and is never sent by this action.',
   '正在重新核对并保存叶号…':'Rechecking the draft and saving its leaf…',
@@ -121,7 +128,7 @@ export const english = Object.freeze({
   '演示区域只读取已有交易记录，不签署或发送转账。':'This demo section only reads existing transaction records; it does not sign or send transfers.',
 
   '验证树已就绪':'Verification tree ready',
-  '支持本地签名自检 · 尚未接入账户部署、交易签名或广播。':'Local signature self-check available · Account deployment, transaction signing and broadcasting are not connected.',
+  '支持消息签名自检和本机 Anvil 转账试签。BSC 测试网可复核并预留草稿。':'Message self-check and signed transfer simulation on local Anvil. BSC testnet supports draft review and reservation.',
   '让一次签名，可见、可验证。':'See a signature. Verify it yourself.',
   '解锁测试密钥库，用独立验证树签署一条测试消息。每次签名前，先永久记录叶号。':'Unlock your test vault and sign a test message with a separate verification tree. Each leaf is recorded before signing.',
   '本地自检 · 不发送交易':'Local self-check · No transactions',
@@ -253,7 +260,7 @@ export const english = Object.freeze({
   '准备测试交易':'Prepare a test transfer', '公开证明验证 · 合约回归':'Public proof verification · Contract tests',
   '已完成 ↗':'Complete ↗', '本地创建 · 签名转账 · 换根':'Local creation · Signed transfers · Rotation', '本地跑通 ↗':'Working locally ↗',
   '密钥加密存储 · 恢复与叶号日志':'Encrypted keys · Recovery · Leaf journal', '下一阶段':'Next phase',
-  '浏览器签名 · 公共测试网转账':'Browser signing · Public testnet transfers', '待接入':'Planned',
+  'BSC 测试网签名与转账':'Signing and transfers on BSC testnet', '待接入':'Planned',
   '开始之前。':'Before you begin.', '这个项目在探索什么？':'What are we exploring?',
   '我们探索以哈希签名授权 BSC 智能账户的实现。客户端生成一次性签名，合约检查证明、有效期与叶号，再执行被授权的调用。抗量子能力及所选参数仍需进一步评估。':'We are exploring hash signatures for authorizing BSC smart accounts. The client generates a one-time signature; the contract checks the proof, expiry and leaf index before executing the authorized call. Quantum resistance and the chosen parameters still require evaluation.',
   '现在可以体验哪些功能？':'What can I try today?',

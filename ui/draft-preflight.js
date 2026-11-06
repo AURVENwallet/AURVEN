@@ -39,7 +39,7 @@ export function nextTransferLeaf(state, journal) {
   return next;
 }
 
-export function compareDraftState(draft, state, binding, journal, reviewed) {
+export function compareDraftAccount(draft, state, binding, reviewed) {
   const original = draft.snapshot;
   if (!binding?.matched || binding.chainId !== draft.chainId || binding.account !== draft.account.toLowerCase() ||
       binding.snapshot.epoch !== state.epoch || binding.derivedRoot !== state.root || binding.derivedPubSeed !== state.pubSeed) fail('DRAFT_KEYS');
@@ -51,6 +51,10 @@ export function compareDraftState(draft, state, binding, journal, reviewed) {
       draft.epoch !== state.epoch || original.next !== state.next) fail('DRAFT_STALE');
   if (draft.deadline <= state.timestamp || draft.deadline > state.timestamp + 3600) fail('DRAFT_DEADLINE');
   if (!uint256(state.balanceWei) || BigInt(state.balanceWei) < BigInt(draft.valueWei)) fail('DRAFT_BALANCE');
+}
+
+export function compareDraftState(draft, state, binding, journal, reviewed) {
+  compareDraftAccount(draft,state,binding,reviewed);
   // The local journal may be ahead even when an RPC has never seen the signature.
   const next = nextTransferLeaf(state,journal);
   if (draft.leaf < next) fail('DRAFT_LEAF');

@@ -4,18 +4,21 @@ import {hex} from './vault-crypto.js';
 import {ProofWorkerClient} from './proof-worker-client.js';
 import {LOCAL_PROOF_FORMAT,PROOF_ACCOUNT,validateProofMessage,proofDigest,verifyLocalProof,proofTreeState} from './local-proof.js';
 import {readAccount} from './account-state.js';
-import {validateReviewDraft,compareDraftState,nextTransferLeaf} from './draft-preflight.js';
+import {validateReviewDraft,compareDraftAccount,compareDraftState,nextTransferLeaf} from './draft-preflight.js';
+import {localSimulationEndpoint,reservedRow,simulateLocalProof} from './local-transfer.js';
 import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
 
 export class TestVault {
   #key;#walletId;#revision=0;#generation=0;#timer;#deadline=0;#details=null;#observed=new Map();
   #proofWorker;#proofTree;#proofGeneration=0;
   #bindingWorker;#bindingAbort;#bindingGeneration=0;#bindingResult;#reviewTicket;
+  #reserved;#simulationAbort;
   constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
-    bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount}={}){
+    bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,
+    transferWorkerFactory=()=>new ProofWorkerClient(new URL('./local-transfer-worker.js',import.meta.url))}={}){
     if(!locks?.request||!Number.isFinite(idleMs)||idleMs<=0)fail('UNSUPPORTED');
     this.store=store;this.locks=locks;this.now=now;this.idleMs=idleMs;this.onLock=onLock;this.workerFactory=workerFactory;
-    this.bindingWorkerFactory=bindingWorkerFactory;this.accountReader=accountReader;
+    this.bindingWorkerFactory=bindingWorkerFactory;this.accountReader=accountReader;this.transferWorkerFactory=transferWorkerFactory;
   }
   get unlocked(){if(this.#key&&this.now()>=this.#deadline)this.lock('idle');return !!this.#key;}
   get details(){return this.#details?{...this.#details,unlocked:this.unlocked}:null;}
@@ -247,14 +250,81 @@ export class TestVault {
         this.#revision = updated.revision;
         this.#setDetails(updated,payload);
         current();
-        return {...report,revision:updated.revision};
+        const receipt = Object.freeze({...report,revision:updated.revision});
+        const local = localSimulationEndpoint(endpoint,draft.chainId);
+        this.#reserved = local ? {receipt,draft,binding,endpoint:local} : undefined;
+        return receipt;
       } catch (error) {
         if (!(error instanceof VaultError) || ['AUTH_FAILED','FORMAT','MISSING','ROLLBACK','STORAGE','CONFLICT','UNSUPPORTED'].includes(error.code)) this.lock('storage');
         throw error;
       }
     });
   }
+  async simulateReservedTransfer(receipt, signal) {
+    const context = this.#capture();
+    const reserved = this.#reserved;
+    if (!reserved || receipt !== reserved.receipt) fail('SIGN_RESERVATION');
+    if (this.#simulationAbort) fail('BUSY');
+    this.#reserved = undefined;
+    const {draft,binding,endpoint} = reserved;
+    const controller = new AbortController();
+    this.#simulationAbort = controller;
+    const cancel = signal ? AbortSignal.any([signal,controller.signal]) : controller.signal;
+    const current = () => {
+      this.#check(context);
+      if (cancel.aborted || binding !== this.#bindingResult) fail('CANCELED');
+    };
+    const readState = async observation => {
+      current();
+      const raw = await this.accountReader({endpoint,account:binding.account,chainId:31337,signal:cancel});
+      current();
+      const state = validateKeySnapshot(raw,31337,binding.account);
+      compareDraftAccount(draft,{...state,balanceWei:raw.balanceWei},binding,observation);
+      return state;
+    };
+    let worker, proof;
+    const stopWorker = () => worker?.dispose();
+    try {
+      validateReviewDraft(draft);
+      const before = await readState(receipt);
+      return await this.#exclusive(async () => {
+        const {record,payload} = await this.#load(context);
+        current();
+        if (record.mode !== 'active' || record.chainId !== 31337) fail('SIGN_LOCAL');
+        const row = reservedRow(payload.journal,draft);
+        if (row.simulationAttempt) fail('SIGN_RESERVATION');
+        row.simulationAttempt = true;
+        const updated = await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
+        current();
+        await this.store.compareAndSwap(record,updated);
+        this.#remember(updated);
+        this.#check(context);
+        this.#revision=updated.revision;
+        this.#setDetails(updated,payload);
+        current();
+        worker = this.transferWorkerFactory();
+        cancel.addEventListener('abort',stopWorker,{once:true});
+        proof = await worker.request('sign-local',{record:updated,key:context.key,draft});
+        current();
+        const after = await readState(before);
+        current();
+        const result = await simulateLocalProof(endpoint,draft,after,proof,cancel);
+        current();
+        return result;
+      });
+    } catch (error) {
+      if (['AUTH_FAILED','FORMAT','MISSING','ROLLBACK','STORAGE','CONFLICT'].includes(error.code)) this.lock('storage');
+      throw error;
+    } finally {
+      cancel.removeEventListener('abort',stopWorker);
+      worker?.dispose();
+      if (proof instanceof Uint8Array) proof.fill(0);
+      if (this.#simulationAbort === controller) this.#simulationAbort = undefined;
+    }
+  }
   cancelAccountCheck(){
+    this.#reserved=undefined;
+    this.#simulationAbort?.abort();
     this.#reviewTicket=undefined;
     this.#bindingGeneration++;this.#bindingAbort?.abort();this.#bindingAbort=undefined;
     this.#bindingWorker?.dispose();this.#bindingWorker=undefined;this.#bindingResult=undefined;
@@ -262,6 +332,8 @@ export class TestVault {
   async checkAccountKeys({endpoint,account},progress){
     const context=this.#capture();
     if(this.#bindingAbort)fail('BUSY');
+    this.#reserved=undefined;
+    this.#simulationAbort?.abort();
     this.#reviewTicket=undefined;
     this.#bindingResult=undefined;
     account=typeof account==='string'?account.trim().toLowerCase():'';

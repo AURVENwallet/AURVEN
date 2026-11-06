@@ -7,6 +7,7 @@ import {validateKeySnapshot} from '../ui/account-key-check.js';
 import {TestVault} from '../ui/vault-service.js';
 import {accountCodeHash} from '../ui/contract-pin.js';
 import {prepareTransfer} from '../ui/transfer.js';
+import {localSimulationEndpoint,signLocalTransfer} from '../ui/local-transfer.js';
 import {testIdentitySeeds,testActiveSeeds} from '../ui/test-wallet-core.js';
 import {fromHex} from '../ui/local-proof.js';
 import {EvmTreeKey,leafPk} from '../ui/lib/evmwots.js';
@@ -30,14 +31,14 @@ class Client{
     return deriveAccountRoot(payload,progress,partialTree);}
   dispose(){this.disposed=true;}
 }
-async function setup({store=new Store(),client=new Client(),change=()=>{},locks={request:async(name,options,action)=>action({name})}}={}){
+async function setup({store=new Store(),client=new Client(),change=()=>{},locks={request:async(name,options,action)=>action({name})},transferWorkerFactory}={}){
   const derived=await deriveAccountRoot({record:store.record,key:base.key,snapshot},null,partialTree);
   let reads=0;const reader=async args=>{
     assert.equal(args.chainId,31337);assert.equal(args.account,account);
     if (reads < 2) assert.ok(args.signal);
     const current={...snapshot,root:derived.root};reads++;await change(current,reads);return current;
   };
-  const vault=new TestVault(store,{locks,accountReader:reader,bindingWorkerFactory:()=>client.disposed ? new Client() : client});
+  const vault=new TestVault(store,{locks,accountReader:reader,bindingWorkerFactory:()=>client.disposed ? new Client() : client,transferWorkerFactory});
   await vault.unlock(password);return {vault,store,client,reads:()=>reads};
 }
 const request={account,endpoint:'https://example.test/disposable-provider-marker'};
@@ -221,6 +222,105 @@ test('reservations reject changed payloads, old sessions and the rotation-only l
   await assert.rejects(vault.suggestedTransferLeaf(draft.snapshot),code('DRAFT_EXHAUSTED'));
   await assert.rejects(vault.reviewTransferDraft(draft,request.endpoint),code('DRAFT_EXHAUSTED'));
   assert.equal(store.writes,1);vault.lock();
+});
+
+const localRpc = 'http://127.0.0.1:8950/';
+async function simulationFixture({change,sign,endpoint=localRpc}={}) {
+  const store = new WritableStore();
+  const commands = [];
+  const transferWorkerFactory = () => ({
+    async request(type,input) {
+      commands.push(type);
+      assert.equal(store.writes,2,'signing must wait for the durable attempt marker');
+      return sign ? sign(input) : signLocalTransfer(input,partialTree);
+    },
+    dispose() {}
+  });
+  const instance = await reviewFixture(change,{}, {store,transferWorkerFactory});
+  const {vault,draft} = instance;
+  const review = await vault.reviewTransferDraft(draft,endpoint);
+  const receipt = await vault.reserveTransferDraft(draft,endpoint,review);
+  return {...instance,commands,receipt};
+}
+
+test('simulation accepts only the loopback Anvil RPC and a fresh in-session reservation',async()=>{
+  for (const endpoint of ['https://example.org','http://127.0.0.1.example.org','http://example.org@127.0.0.1','http://localhost/proxy','http://localhost/?token=x','#']) {
+    assert.equal(localSimulationEndpoint(endpoint,31337),null);
+  }
+  assert.equal(localSimulationEndpoint(localRpc,97),null);
+  assert.equal(localSimulationEndpoint(localRpc,56),null);
+  const remote = await simulationFixture({endpoint:request.endpoint});
+  await assert.rejects(remote.vault.simulateReservedTransfer(remote.receipt),code('SIGN_RESERVATION'));
+  remote.vault.lock();
+  const {vault,receipt,commands} = await simulationFixture();
+  await assert.rejects(vault.simulateReservedTransfer({...receipt}),code('SIGN_RESERVATION'));
+  vault.lock();await vault.unlock(password);
+  await assert.rejects(vault.simulateReservedTransfer(receipt),code('SIGN_RESERVATION'));
+  assert.deepEqual(commands,[]);vault.lock();
+});
+
+test('one simulation signs the saved digest once and sends only a block-pinned eth_call',async t=>{
+  const {vault,receipt,store,draft,commands} = await simulationFixture();
+  const methods = [];
+  t.mock.method(globalThis,'fetch',async(url,options)=>{
+    const {id,method,params} = JSON.parse(options.body);methods.push(method);
+    assert.equal(url,localRpc);assert.equal(options.redirect,'error');assert.equal(options.credentials,'omit');
+    if (method==='eth_call') {
+      assert.equal(params[0].to,account);assert.match(params[0].data,/^0x[0-9a-f]+$/);
+      assert.deepEqual(params[1],{blockHash:snapshot.blockHash,requireCanonical:true});
+    }
+    const replies={eth_chainId:'0x7a69',web3_clientVersion:'anvil/test',eth_call:'0x'};
+    return Response.json({jsonrpc:'2.0',id,result:replies[method]});
+  });
+  const pending = vault.simulateReservedTransfer(receipt);
+  await assert.rejects(vault.simulateReservedTransfer(receipt),code('SIGN_RESERVATION'));
+  const result = await pending;
+  assert.deepEqual(result,{digest:draft.digest,leaf:0,blockNumber:'0x1',blockHash:snapshot.blockHash});
+  assert.deepEqual(methods,['eth_chainId','web3_clientVersion','eth_call']);assert.deepEqual(commands,['sign-local']);
+  const {journal} = await decryptPayload(store.record,base.key);
+  assert.equal(journal.length,1);assert.equal(journal[0].simulationAttempt,true);vault.lock();
+});
+
+test('no proof reaches RPC on storage failure, cancellation, expiry, changed state or an invalid worker proof',async t=>{
+  t.mock.method(globalThis,'fetch',()=>assert.fail('Failed simulation must not release an authorization'));
+  for (const mode of ['storage','cancel','expiry','before','after','worker']) {
+    let n=0, controller=new AbortController();
+    const {vault,receipt,commands,store} = await simulationFixture({
+      change:state=>{
+        n++;
+        if (mode==='expiry' && n===3) state.timestamp=snapshot.timestamp+601;
+        if ((mode==='before'&&n===3)||(mode==='after'&&n===4)) state.next=1;
+      },
+      sign:async input=>{
+        if(mode==='cancel') controller.abort();
+        return mode==='worker'?new Uint8Array(448):signLocalTransfer(input,partialTree);
+      }
+    });
+    // Expiry relative to a fresh block must be testable without an invalid RPC clock.
+    if(mode==='expiry') t.mock.method(Date,'now',()=>1000*(snapshot.timestamp+601));
+    if(mode==='storage')store.beforeCommit=()=>{throw new VaultError('STORAGE');};
+    const reason={storage:'STORAGE',cancel:'CANCELED',expiry:'DRAFT_DEADLINE',before:'DRAFT_STALE',after:'DRAFT_STALE',worker:'PROOF_VERIFY'}[mode];
+    await assert.rejects(vault.simulateReservedTransfer(receipt,controller.signal),code(reason));
+    if(mode==='expiry') Date.now.mock.restore();
+    assert.equal(commands.length,['cancel','after','worker'].includes(mode)?1:0);
+    assert.equal((await decryptPayload(store.record,base.key)).journal.length,1);
+    vault.lock();
+  }
+});
+
+test('the local transfer worker refuses unmarked, altered or read-only reservations',async()=>{
+  const {vault,draft,store} = await simulationFixture();
+  await assert.rejects(signLocalTransfer({record:store.record,key:base.key,draft},partialTree),code('SIGN_RESERVATION'));
+  const payload = await decryptPayload(store.record,base.key);
+  payload.journal[0].simulationAttempt=true;
+  const record = await encryptPayload(payload,base.key,store.record);
+  await assert.rejects(signLocalTransfer({record,key:base.key,draft:{...draft,valueWei:'1'}},partialTree),code('DRAFT_DIGEST'));
+  const recovered = await encryptPayload(payload,base.key,{...store.record,mode:'recovery-readonly'});
+  await assert.rejects(signLocalTransfer({record:recovered,key:base.key,draft},partialTree),code('SIGN_LOCAL'));
+  payload.journal[0].digest='ff'.repeat(16);
+  const mismatch=await encryptPayload(payload,base.key,store.record);
+  await assert.rejects(signLocalTransfer({record:mismatch,key:base.key,draft},partialTree),code('SIGN_RESERVATION'));
+  vault.lock();
 });
 
 test('root check validates pinned contract, test network and complete snapshot context',()=>{

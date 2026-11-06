@@ -6,6 +6,9 @@ const el=id=>document.getElementById(id);
 const status=el('vaultStatus');
 let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
+  SIGN_LOCAL:'本地试签仅支持本机 Anvil 节点和链号 31337。',
+  SIGN_RESERVATION:'此预留已不可用于试签。请生成新草稿并重新预留。',
+  SIMULATION:'本地合约模拟未通过。叶号仍已占用，请重新生成草稿。',
   DRAFT_REVIEW:'请先重新复核当前草稿，再预留叶号。',
   DRAFT_EXHAUSTED:'这棵树的交易叶已用尽，请先换根。',
   DRAFT_SOURCE:'请使用链上同步模式重新生成草稿。',
@@ -107,6 +110,7 @@ async function draftAction(action) {
   }
 }
 export const walletDraftActions = {
+  simulate:(receipt,signal)=>draftAction(v=>v.simulateReservedTransfer(receipt,signal)),
   review:(draft,endpoint,signal)=>draftAction(v=>v.reviewTransferDraft(draft,endpoint,signal)),
   reserve:(draft,endpoint,report,signal)=>draftAction(v=>v.reserveTransferDraft(draft,endpoint,report,signal)),
   nextLeaf:state=>vault?.unlocked ? draftAction(v=>v.suggestedTransferLeaf(state)) : state.next

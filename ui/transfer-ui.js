@@ -1,5 +1,6 @@
 import {prepareTransfer} from './transfer.js';
 import {readAccount} from './account-state.js';
+import {localSimulationEndpoint} from './local-transfer.js';
 import {trackAccount} from './activity-ui.js';
 import {fetchDemoReport,verifyLocalDemo,LOCAL_DEMO_RPC,DEMO_STAGES} from './local-demo.js';
 
@@ -15,6 +16,7 @@ let demoLoading=false;
 let trackingState;
 let draftActions;
 let reviewReport;
+let reservedReceipt;
 let reserving = false;
 let reviewController;
 
@@ -22,6 +24,8 @@ function clearReview() {
   reviewController?.abort();
   reviewController = undefined;
   reviewReport = undefined;
+  reservedReceipt = undefined;
+  get('simulatePanel').hidden = true;
   const interrupted = reserving;
   if (interrupted) {
     reserving = false;
@@ -61,6 +65,10 @@ async function checkOrReserve(reserve) {
     if (request.signal.aborted) return;
     if (reserve) {
       draft = {...draft,leafReserved:true};
+      if (localSimulationEndpoint(endpoint,draft.chainId)) {
+        reservedReceipt = result;
+        get('simulatePanel').hidden = false;
+      }
       get('reviewStatus').textContent = '叶号已为此摘要永久预留。可导出未签名草稿。';
     } else {
       reviewReport = result;
@@ -84,6 +92,27 @@ async function checkOrReserve(reserve) {
 }
 get('reviewDraft').onclick = () => checkOrReserve(false);
 get('reserveDraft').onclick = () => checkOrReserve(true);
+get('simulateDraft').onclick = async () => {
+  if (!reservedReceipt || reviewController) return;
+  const receipt = reservedReceipt;
+  reservedReceipt = undefined;
+  const request = new AbortController();
+  reviewController = request;
+  get('simulatePanel').hidden = true;
+  get('reviewBlock').textContent = '';
+  get('reviewStatus').textContent = '正在本地生成签名并模拟合约执行…';
+  try {
+    const result = await draftActions.simulate(receipt,request.signal);
+    if (!request.signal.aborted) {
+      get('reviewStatus').textContent = '合约已在此区块接受签名并完成模拟。模拟未发送交易。';
+      get('reviewBlock').textContent = ' #' + BigInt(result.blockNumber);
+    }
+  } catch (error) {
+    if (!request.signal.aborted) get('reviewStatus').textContent = error.message;
+  } finally {
+    if (reviewController === request) reviewController = undefined;
+  }
+};
 
 // A public host has no access to the visitor's locally generated demo record.
 // Keep the complete signed-demo flow on the visitor's own loopback preview.
