@@ -35,3 +35,5 @@ jobs:
         run: node scripts/check-runtime-pin.mjs
       - name: Test client, simulation and language switching
         run: node --test test/*.test.mjs
+      - name: Rehearse loss of the original signer on isolated Anvil
+        run: node scripts/lost-device-rehearsal.mjs

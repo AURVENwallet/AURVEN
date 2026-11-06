@@ -20,6 +20,8 @@ The [browser receipt](https://testnet.bscscan.com/tx/0x96b45367b4f3f5761610e6ee2
 
 The [zero-cost BSC mainnet rehearsal](docs/MAINNET_READINESS.md#bsc-mainnet-deployment-rehearsal) exercises the generic account and the [chain-56 atomic setup](docs/MAINNET_READINESS.md#atomic-mainnet-account-setup) against a shared finalized block using read-only RPC calls. The chain-56 factory creates and activates the predicted account in one call. The public wallet interface remains on testnet.
 
+The [lost-device rehearsal](docs/KEY_STATE.md#lost-device-rehearsal) exercises a separate local holder with a pre-enrolled standby. It checks an older read-only backup, a rolled-back takeover, and an unsubmitted payment signed by the lost device.
+
 ## Quick start
 
 ### Start a disposable wallet
@@ -184,7 +186,7 @@ The vault uses AES-256-GCM, PBKDF2-HMAC-SHA-256 with 600,000 iterations, fresh r
 
 The reservation service serializes cooperating tabs, authenticates the current journal and commits a leaf reservation before a signing caller may return a proof. Compare-and-swap rejects unexpected changes; storage failure stops signing. Tests connect this callback to the existing disposable signer. **The website does not yet sign, deploy accounts or broadcast using its encrypted seed.** Browser signing, pending-transaction recovery and public-testnet execution remain separate milestones.
 
-**Every imported backup is permanently read-only in this version.** A backup and the on-chain leaf counter cannot prove that no later off-chain signature exists. A lower revision is detected only if already observed by the live vault object; complete browser-profile rollback across restart is not reliably detected. Multi-device signing and independent recovery authorization are not implemented. See [key trees, reservation ordering and recovery boundaries](docs/KEY_STATE.md).
+**Every imported backup is permanently read-only in this version.** A backup and the on-chain leaf counter cannot prove that no later off-chain signature exists. A lower revision is detected only if already observed by the live vault object; complete browser-profile rollback across restart is not reliably detected. The public wallet supports device handover with a working source. Independent takeover after device loss is currently a local experiment. See [key trees, reservation ordering and recovery boundaries](docs/KEY_STATE.md).
 
 Validation for this milestone adds 16 Node tests and a six-check browser harness for actual IndexedDB and Web Locks. It does not simulate physical power failure or establish cryptographic security. P0-B remains partially implemented until the remaining recovery and signing gates are resolved. The older milestone records below describe their state at the time.
 
@@ -291,7 +293,7 @@ BscTestAccount allows construction only on chains 97 and 31337; this restriction
 | Account creation and bootstrap | Disposable local demo completes direct deployment and bootstrap | Browser creation flow and BSC testnet deployment |
 | Seed generation, mnemonics and recovery | Local demo generates disposable public test seeds; browser custody remains pending | Encrypted storage, unlock and lock behavior, backup validation |
 | One-time key reservation | Local demo persists before signing and guards against concurrency within one process; webpage drafts do not reserve leaves | Cross-tab single-writer locking, crash and recovery tests |
-| Device handover and recovery reuse protection | Two-profile handover with a finalized receipt check on BSC testnet | Independent lost-device recovery and full-profile rollback detection remain open |
+| Device handover and recovery reuse protection | Two-profile handover with a finalized receipt check on BSC testnet | Local pre-enrolled standby drill complete. Public lost-device recovery and full-profile rollback detection remain open |
 | Account state and network checks | Fixed-block reads from one RPC, with runtime checks | Comparison against a second source, retries, continued refresh and error reporting |
 | Transaction signing, fees and broadcasting | Local script completes signing, simulation and broadcasting; webpage checks actual receipts | Browser signing interface, BSC fee policy and public-testnet acceptance |
 | Pending transactions and cancellation | Pending | Rebroadcast the same signature, handle timeouts, manage transaction nonces and leaf indices separately |

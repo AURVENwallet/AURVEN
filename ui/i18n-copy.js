@@ -1,5 +1,6 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '设备丢失后如何接管？查看本地演练 ↗':'Device lost? View the local recovery drill ↗',
   '查看主网建户只读演练 ↗':'View read-only mainnet setup rehearsal ↗',
   '从已预留的签名叶恢复原授权':'Recover authorization from reserved leaf',
   '原授权已在本机恢复。请检查原付款能否继续。':'Original authorization recovered on this device. Review the interrupted payment.',

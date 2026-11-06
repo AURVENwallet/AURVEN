@@ -1,6 +1,6 @@
 # Key trees, reservations and recovery
 
-The original encrypted browser vault can sign on BSC testnet from one browser profile. The reusable account panel creates a three-wei test account, supports separate one-wei transfers and rotates its active signing tree. The disposable trial and local simulation have separate workflows. Independent recovery authorization remains open.
+The original encrypted browser vault can sign on BSC testnet from one browser profile. The reusable account panel creates a three-wei test account, supports separate one-wei transfers and rotates its active signing tree. The disposable trial and local simulation have separate workflows. Independent recovery for the public wallet remains open.
 
 ## Reusable account signing
 
@@ -102,7 +102,34 @@ An unlocked chain-97 backup lists distinct candidate addresses from its authenti
 
 The live vault object detects a revision lower than one it has already authenticated, including across lock/unlock. **This does not detect a complete browser-profile rollback followed by an application restart.** Browser-local counters cannot provide that guarantee without an independent freshness anchor. Do not describe this release as rollback-proof or crash-recoverable wallet custody.
 
-If the trusted original device and latest journal are lost, safe recovery requires an independent, prearranged authority that can rotate the account without reusing the possibly consumed tree. The current account has no such recovery authority. Importing a file does not restore control of the account.
+If the trusted original device and latest journal are lost, safe recovery requires an independent, prearranged authority that can rotate the account without reusing the possibly consumed tree. The public testnet account has no such recovery authority. The local holder below exercises a pre-enrolled standby. Importing a file does not restore control of the account.
+
+## Lost-device rehearsal
+
+This opt-in experiment keeps native coins at one stable holder address. Before device loss, the user provisions two independently generated signing accounts: one on the original device and one on a standby device. Each uses the existing `KeyLabAccount` WOTS verification code. The holder checks their runtime code and the standby's initial epoch, unused leaf counter, seed and root. Enrollment also commits to a random 32-byte activation code, the local chain ID, holder and both signer addresses. The drill reads those values back before funding. The standby must be provisioned ahead of time.
+
+Anyone with the activation code may submit `recover(code)`. Its only possible destination is the enrolled standby signer. The holder checks the standby still has its enrolled key state, consumes the commitment, and switches its payment authority in the same transaction. Seeing the code in a pending or orphaned transaction permits early activation of that same standby. The code alone grants no authority to spend funds. Store the code offline, separately from the standby's signing material. A change of control cannot undo a payment mined earlier.
+
+Run from the repository root with Node.js 22+ and the pinned Foundry toolchain:
+
+```sh
+forge build
+node scripts/lost-device-rehearsal.mjs
+```
+
+The runner starts and stops its own loopback Anvil node on chain 31337. It accepts no external endpoint or wallet credentials. Separate Node workers generate four complete 1,024-leaf trees, independently create encrypted test vaults and reserve their signing leaves. This harness uses in-memory storage. The original worker saves an encrypted backup after bootstrap, then signs a payment that never reaches the chain and exits. On-chain leaf 0 still looks unused. Importing the older backup through the wallet's normal recovery API creates a read-only vault and its attempt to reserve that leaf fails.
+
+| Rehearsed condition | Observed outcome |
+| --- | --- |
+| Incorrect code or a commitment copied to another holder | The holder rejects recovery. |
+| Standby already used or its key state changed | Enrollment or takeover fails. The original retains control. |
+| First takeover mined on a temporary branch | The standby worker refuses to reserve a payment leaf before finality. |
+| Branch rolled back | The receiver rejects the orphaned receipt. The old authorization would still execute on that branch. |
+| Same recovery call resubmitted by a different payer | The receiver checks the canonical receipt, holder event, consumed commitment, active signer and its own unused root at a finalized block. |
+| Original signed bytes retried after the finalized takeover | The holder rejects the retired signer. The original payment remains unexpired and its signing account still reports next leaf 0. |
+| First payment by the standby | One fixture wei reaches the new recipient from the same holder, two wei remain there and the original recipient gets zero. A second recovery fails. |
+
+Only the local holder's native balance follows this change. Existing public accounts and funds held at either signing address have their own authority. The evidence covers a single disposable node and independent processes on one machine. The protocol permits one takeover. If both devices or the code are lost, recovery cannot proceed. A copied standby secret could still produce conflicting off-chain signatures. A rollback beyond the observed finalized block could make an already released standby payment eligible again after another takeover. The signer must retain its off-chain reservation through such a rollback. Independent physical storage, replacing a standby after a successful takeover, testnet finality across distinct providers and independent review remain open.
 
 ## Verification and remaining work
 
