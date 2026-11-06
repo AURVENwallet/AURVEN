@@ -20,6 +20,21 @@ The payer reply to the second transfer was deliberately dropped. After reopening
 
 The browser stores up to eight account creations (including unresolved creations) and 32 public action records. At capacity it discards the oldest eligible settled action or expired preparation. It keeps confirmed account creations and unresolved wallet requests. Encrypted leaf reservations are stored separately and never pruned. Imported vaults are read-only. Retail wallet compatibility and recovery after losing the original device still require testing.
 
+## Checking interrupted and replaced payments
+
+Select an action in the reusable account's history and choose **Verify receipt**. A locked vault can check public records. The displayed block identifies when a result was last verified.
+
+| What the node reports | What the wallet displays |
+| --- | --- |
+| A known transaction is pending, or its hash cannot be found and its nonce is unused | Pending and unseen have separate messages. An absent hash alone cannot establish that a payment was permanently dropped. |
+| A canonical transaction consumes the same payer nonce with different calldata, value or destination | A link to that different transaction. An exposed, unexpired account authorization can still be submitted by another payer. |
+| Another hash carries the same intended action and passes the receipt and contract checks | The included action with a link back to the original known hash. |
+| The previously verified inclusion leaves the canonical chain | A reorganization notice. If the same transaction is later included at a new block, the panel reports the new inclusion. |
+| A signed action remains unmined beyond its on-chain deadline | Authorization expired as of the checked block. A plain top-up has no on-chain expiry. A mined revert is reported separately. |
+| A node is behind, lacks the required history, or changes its anchor block mid-check | The check fails. The last saved receipt stays labeled as a previous observation. |
+
+On 2026-11-06 a disposable local Anvil chain reproduced a dropped transfer, nonce replacement, a fee change that preserved the action, removal of a mined block and re-inclusion. A mobile-width Edge session reopened its history with the vault locked. After an alternative transaction consumed the payer nonce, a newly approved transfer used leaf 1; the orphaned transfer had consumed leaf 0 locally. The recipient received exactly one wei. The client also rechecked the [existing chain-97 receipt at block 141083977](https://testnet.bscscan.com/tx/0xd4375fec221a613bbe4caddc53fc04b00c6eb64214d5e5b87913b3f3e556a953) against two public nodes. These checks issued no new public payment. The UI uses a single node per check and can only classify the evidence that node supplies.
+
 ## Disposable browser transfer
 
 Open [Test Wallet](https://aurven.site/wallet.html#testnetTrial) in a browser with an injected payer wallet on BSC testnet and enough faucet tBNB for gas. Connect, enter a regular recipient address and preview both addresses and the maximum fee. The payer wallet asks for one contract creation with a value of one wei. The constructor checks chain 97, creates a pinned smart account, activates a fresh tree, funds it and executes the one-wei transfer in the same transaction. A failure reverts all these steps. The browser generates the one-time keys in a disposable worker, commits each signing leaf to IndexedDB before signing and discards the keys afterwards.
@@ -81,8 +96,8 @@ These estimates assume continuous development of the single-signer native-coin w
 
 | Milestone | Planning range from this baseline | Evidence required to pass |
 | --- | --- | --- |
-| Single-device public testnet pilot | Basic path completed on 2026-11-06 | Five mined actions and recovery after a lost payer reply are recorded above. Outstanding pilot cases include expired, dropped, replaced, reverted and reorganized submissions, plus compatibility with retail wallets. |
-| Recovery and pilot | Allow a further 4–8 weeks for engineering and drills | Persist the exact signed payload before releasing it. Reconcile pending, dropped and reorganized transactions without signing twice with a leaf. Demonstrate safe device handover, lost-device recovery, historical-root rejection and fail-closed behavior after restoring an old profile. Run a public testnet pilot through those scenarios. |
+| Single-device public testnet pilot | Basic path completed on 2026-11-06 | Five mined actions and recovery after a lost payer reply are recorded above. Local drills now cover dropped, replaced, reverted and reorganized payments. Remaining pilot work includes retail wallet compatibility, testing against restricted RPC history and observing a wider range of public network conditions. |
+| Recovery and pilot | Allow a further 4–8 weeks for engineering and drills | Persist the exact signed payload before releasing it. Reproduce receipt recovery across independent RPC outages, deep reorganizations and device loss while preserving every previously used leaf. Demonstrate safe device handover, lost-device recovery, historical-root rejection and fail-closed behavior after restoring an old profile. Run a public testnet pilot through those scenarios. |
 | Public real-asset wallet | Conditional planning range of 3–6 months total | Obtain independent cryptographic parameter and contract/client reviews, fix and retest findings, and publish results. Resolve custody and key-reuse findings before launch. Verify network-specific builds, deployment reproducibility, live monitoring, incident response and a funded mainnet gas payer. Obtain explicit mainnet deployment approval. |
 
 With the existing server, local tools and faucet tBNB, early testing can proceed on the current budget. The independent review needs a confirmed volunteer, sponsor or funding. Mainnet deployment needs real BNB for gas. Until those resources and the technical gates are satisfied, a public launch date is open. [BNB Smart Chain testing and gas](https://docs.bnbchain.org/bnb-smart-chain/developers/quick-guide/) · [Key management and recovery](KEY_STATE.md) · [Current security status](../SECURITY.md).

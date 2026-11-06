@@ -1,14 +1,16 @@
 import {networkWalletId,authorizeNetwork} from './vault-ui.js';
 import {openVaultStore} from './vault-store.js';
 import {trialEndpoint,payerAccount,inTbnb} from './browser-trial.js';
-import {updateTrial} from './browser-trial-store.js';
-import {previewNetwork,submitNetwork,networkReceipt,checkOldApproval} from './network-account.js';
+import {previewNetwork,submitNetwork,reconcileNetwork,checkOldApproval} from './network-account.js';
 import {readAccount} from './account-state.js';
 
 const el=id=>document.getElementById(id),endpoint=trialEndpoint;
 const kinds={create:'建户并存入 3 wei',send:'转出 1 wei',rotate:'轮换签名密钥',fund:'再存入 3 wei'};
-const states={preparing:'准备中',requested:'等待核对付款结果',waiting:'等待链上回执。',included:'交易回执已核对',declined:'付款请求已取消。',stopped:'准备已停止，尚未请求付款。',reverted:'测试网交易已回滚。'};
-const errors={NET_ACCOUNT_LIMIT:'本浏览器最多可保存 8 个可复用测试账户，请使用已有账户。',
+const states={pending:'付款钱包已提交，当前节点仍在等待打包。',unseen:'当前节点未找到这笔交易。请稍后再核对，或从付款钱包复制交易哈希。',
+  replaced:'相同付款序号已被另一笔不同内容的交易使用。',reorg:'原回执所在区块已被替换，当前链上尚未核实这笔操作。',
+  expired:'截至核对区块未发现已打包的付款，签名授权已过期。',preparing:'准备中',requested:'等待核对付款结果',waiting:'等待链上回执。',included:'交易回执已核对',declined:'付款请求已取消。',stopped:'准备已停止，尚未请求付款。',reverted:'交易已打包，但执行失败。'};
+const errors={NET_CHECK_AGAIN:'另一处已更新此记录，请重新核对。',NET_UNVERIFIED:'本次核对未取得一致的链上证据，请稍后重试。',
+  NET_ACCOUNT_LIMIT:'本浏览器最多可保存 8 个可复用测试账户，请使用已有账户。',
   NET_HISTORY_FULL:'交易历史已满，请先核对尚未确认的回执。',NET_VAULT:'请先解锁链 97 的原始测试密钥库。',RECOVERY:'只读备份无法签名。',LOCKED:'请先解锁链 97 的原始测试密钥库。',
   BUSY:'另一个页面正在保存密钥库，请稍后重试。',FULL:'一次性密钥记录已达到本版本上限，已停止操作。',
   TRIAL_PRICE:'当前 Gas 价格超过试转限制。',TRIAL_CLOCK:'区块时间或草稿有效期异常，请重新预览。',
@@ -28,11 +30,24 @@ function render(){
   for (const id of ['netConnect','netKind','netAccount','netTo','netRecords','netHash']) el(id).disabled=busy;
   el('netPreview').disabled=busy||!payer;el('netConfirm').disabled=busy||!plan;
   el('netHistory').hidden=!row;if (!row) return;
-  el('netCheck').disabled=busy||!row.dataHash;el('netManual').hidden=!row.dataHash||!!row.hash;
+  el('netCheck').disabled=busy||!row.dataHash;el('netManual').hidden=!row.dataHash||['included','reverted','replaced'].includes(row.status);
   el('netOld').hidden=row.kind!=='send'||row.status!=='included';el('netOld').disabled=busy;
-  el('netOutcome').textContent=(states[row.status]??'')+(row.status==='included'?' · Gas '+row.gasUsed+' · '+inTbnb(row.feeWei):'');
-  el('netExplorer').hidden=!row.hash;
-  if(row.hash) el('netExplorer').href='https://testnet.bscscan.com/tx/'+row.hash;
+  const details=[states[row.status]??''];
+  if (row.checkedBlock) details.unshift('上次核对区块 #'+BigInt(row.checkedBlock));
+  if (!row.checkedBlock && ['included','reverted'].includes(row.status)) details.unshift('上次保存的回执');
+  if (row.status==='replaced' && ['send','rotate'].includes(row.kind)) details.push('签名叶已保留。在授权有效期内，其他付款方仍可能提交原授权。');
+  if (row.equivalent) details.push('相同操作以新的交易哈希打包。');
+  if (row.moved) details.push('同一笔交易已在另一个区块重新打包。');
+  if (['included','reverted'].includes(row.status) && row.feeWei!=null) details.push('Gas '+row.gasUsed,inTbnb(row.feeWei));
+  el('netOutcome').textContent=details.join(' · ');
+  const link=(id,hash)=>{
+    const anchor=el(id);anchor.hidden=!hash;
+    if (hash) anchor.href='https://testnet.bscscan.com/tx/'+hash;
+    else anchor.removeAttribute('href');
+  };
+  link('netExplorer',row.hash);
+  link('netReplacement',row.replacementHash);
+  link('netOriginal',row.equivalent?row.submittedHash:null);
 }
 function options(select,items,preferred) {
   const prev=preferred||select.value;
@@ -53,8 +68,13 @@ async function action(fn){
   finally{busy=false;render();}
 }
 async function check(row,hash){
-  const result=await networkReceipt(endpoint,row,hash);
-  await updateTrial(await storage(),row.id,old=>({...old,...result}));await refresh(row.id);
+  let result;
+  try {
+    result=await reconcileNetwork(await storage(),endpoint,row.id,hash);
+  } catch (error) {
+    if (['TRIAL_HASH','NET_CHECK_AGAIN','TRIAL_CHAIN'].includes(error.message)) throw error;
+    throw new Error('NET_UNVERIFIED',{cause:error});
+  } finally { await refresh(row.id); }
   if(result.status!=='included'){status(states[result.status]);return;}
   const s=await readAccount({endpoint,account:row.account,chainId:97});
   status('交易回执已核对 · '+s.balanceWei+' wei · epoch '+s.epoch+' · next '+s.next);

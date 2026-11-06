@@ -1,5 +1,17 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '上次保存的回执':'Previously saved receipt','交易已打包，但执行失败。':'The transaction was mined but execution reverted.',
+  '签名叶已保留。在授权有效期内，其他付款方仍可能提交原授权。':'The signing leaf stays reserved. Another payer could still submit the original authorization before it expires.',
+  '付款钱包已提交，当前节点仍在等待打包。':'Submitted by the payer wallet. This node still shows it as pending.',
+  '当前节点未找到这笔交易。请稍后再核对，或从付款钱包复制交易哈希。':'This node cannot find the transaction. Check again later or paste the hash from the payer wallet.',
+  '相同付款序号已被另一笔不同内容的交易使用。':'A different transaction was mined with the same payer nonce.',
+  '原回执所在区块已被替换，当前链上尚未核实这笔操作。':'The previous inclusion is no longer canonical. This action has not been verified on the current chain.',
+  '截至核对区块未发现已打包的付款，签名授权已过期。':'No mined payment was found as of the checked block. The signed authorization has expired.',
+  '上次核对区块':'Last checked block','相同操作以新的交易哈希打包。':'The same action was mined under a new transaction hash.',
+  '同一笔交易已在另一个区块重新打包。':'The same transaction was included again in a different block.',
+  '查看占用该序号的交易 ↗':'View the transaction that used this nonce ↗','查看原始付款哈希 ↗':'View original payer transaction ↗',
+  '另一处已更新此记录，请重新核对。':'This record changed during the check. Verify it again.',
+  '本次核对未取得一致的链上证据，请稍后重试。':'This check could not verify a consistent chain result. Try again later.',
   '可复用测试账户 ↓':'Reusable test account ↓','可复用测试账户':'Reusable test account',
   '先解锁上方链 97 密钥库，再连接支付 Gas 的测试钱包。建户存入 3 wei 测试币。每次转账和轮换密钥都需要单独确认。':'Unlock the chain-97 vault above and connect a test wallet to pay gas. Opening the account deposits 3 wei of tBNB. Confirm each transfer and key rotation separately.',
   '建户并存入 3 wei':'Open account with 3 wei','再存入 3 wei':'Add 3 wei','转出 1 wei':'Send 1 wei','轮换签名密钥':'Rotate signing keys',
