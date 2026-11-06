@@ -12,6 +12,28 @@ Experimental hash-signature smart accounts for BSC, with a Chinese / English int
 
 ## Quick start
 
+### Start a disposable wallet
+
+With Git, Node.js 22+ and Foundry 1.8.1 installed, run the following on the computer where you will open the wallet.
+
+```sh
+git clone https://github.com/AURVENwallet/AURVEN.git
+cd AURVEN
+node scripts/local-wallet.mjs
+```
+
+The launcher builds the contracts, checks the account bytecode and starts a private preview and a fresh Anvil chain on loopback ports. Open the URL printed in the terminal.
+
+1. Set a demo password and create the vault. The browser generates and encrypts its own keys.
+2. Choose **Pair and prepare a transfer**. The browser derives the public root, and the launcher installs it for this session's account. The wallet reads the account again to confirm the match.
+3. Choose **View the prefilled transfer**. Check the recipient and the amount of 0.01 local coins. Generate the draft, check it, reserve its leaf and choose **Sign and simulate locally**.
+
+The account starts with 1 local test coin. The simulated call leaves balances and the chain's leaf counter unchanged. The selected leaf remains consumed in the browser vault. Refreshing the page locks the vault. Unlock it with the same password and pair again to resume during the same run.
+
+Press Ctrl+C in the terminal to close the preview and its chain. Restarting creates a different account, chain and vault database. Encrypted records from earlier runs may remain in browser site data. The launcher uses Anvil state overrides to install the pinned account code and its initial balance, bypassing deployment and funding transactions. The website includes the same startup commands in Chinese and English under **Start a local signing demo**.
+
+### Run the test suite and static website
+
 Requires Node.js 22+, Python 3 and Foundry 1.8.1. Solidity 0.8.33 is pinned in foundry.toml. The static website has no package-install or frontend build step.
 
 ```sh
@@ -52,7 +74,7 @@ node --test test/local-simulation.test.mjs
 
 The test starts a disposable Anvil process on a free loopback port, generates a fresh vault, and installs the pinned account runtime with a matching test root. It reviews and reserves one transfer, checks that the Solidity contract accepts the signature, then changes one byte of the proof and checks that the contract rejects it. It verifies the account balance, recipient balance, block and leaf counter after simulation. The fixture exists only for the duration of the test.
 
-To use the wallet page with your own matching **active test vault and Anvil account**, select chain 31337 and a loopback HTTP RPC, check the key match, prepare the transfer and reserve its leaf. Choose **Sign and simulate locally**. The node receives executable signed calldata in a read-only `eth_call` at the displayed block. Use a local node you control. The page returns the result and block number. This step has no signed download or broadcast action.
+For a new interactive account, follow [Start a disposable wallet](#start-a-disposable-wallet). With an existing matching **active test vault and Anvil account**, select chain 31337 and a loopback HTTP RPC, check the key match, prepare the transfer and reserve its leaf. Choose **Sign and simulate locally**. The node receives executable signed calldata in a read-only `eth_call` at the displayed block. Use a local node you control. The page returns the result and block number. This step has no signed download or broadcast action.
 
 The attempt is single-use. Reloading or locking clears the in-memory permission. Expiry, interruption or node rejection leaves the reservation consumed. Prepare a fresh draft to try again. Imported backups remain read-only. Chain 97 supports review and reservation only.
 

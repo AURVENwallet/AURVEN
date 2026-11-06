@@ -9,7 +9,7 @@ The checks below are a pre-publication record, not a production security certifi
 | Check | Result / scope |
 | --- | --- |
 | Solidity tests | 43 passed, including chain restrictions, tampering, replay, expiry, rotation, interoperability and multisig behavior. |
-| Client and UI tests | 115 tests as of 2026-11-06. Coverage includes account snapshots, transfer validation, flow simulation, signing reservations, receipt validation, localization, the encrypted vault, verification-only worker signing, offline proof verification, persistent read-only transaction tracking, account key-root comparison, unsigned draft review, durable draft reservations and loopback signed simulation. Compile contracts before running client tests. |
+| Client and UI tests | 117 tests as of 2026-11-06. Coverage includes account snapshots, transfer validation, flow simulation, signing reservations, receipt validation, localization, the encrypted vault, verification-only worker signing, offline proof verification, persistent read-only transaction tracking, account key-root comparison, unsigned draft review, durable draft reservations and loopback signed simulation. Compile contracts before running client tests. |
 | Reproducible source | A clean staged-source copy builds and passes contract tests. Solidity source bytes are preserved by .gitattributes because metadata contributes to the pinned runtime hash. |
 | Runtime pin | Compiled BscTestAccount checked against ui/contract-pin.js. |
 | Secret scan | Gitleaks 8.30.1 scanned the public source snapshot with redacted output; no findings in that scan. Tool archive SHA-256 was checked against the official release checksums. |
@@ -21,6 +21,8 @@ The checks below are a pre-publication record, not a production security certifi
 Scanner: [Gitleaks 8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). Dependency data: [OSV API](https://api.osv.dev/v1/query). The current automated workflow runs source checks, secret scanning, contract tests, runtime-pin verification and client tests. Workflow actions are pinned to commit IDs and receive read-only repository permissions.
 
 ## Known limitations
+
+- **Disposable wallet launcher.** Each invocation starts its own loopback Anvil process, preview port and browser vault namespace. The pairing endpoint checks the Host, browser Origin and session header, accepts only a public 16-byte root, and pins the first valid root. Repeating a request for that root leaves the account counter and balance intact. The launcher uses Anvil administrative methods only for its disposable account. Other programs on the same machine can access local ports, so run it on a computer you control.
 
 - **Local signed simulation.** The selected loopback HTTP node on chain 31337 receives an executable authorization while the transfer is valid. The wallet uses a hash-pinned canonical-block read-only call. A node controlled by someone else could retain and submit the authorization. Success describes the simulated block. It does not produce a transaction receipt. The encrypted journal records the attempt before proof generation, and the page cannot resume a signing attempt from a backup, after reload, or after locking. Vaults containing attempt markers need a reader that understands this journal field.
 

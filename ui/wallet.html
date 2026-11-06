@@ -5,7 +5,17 @@
 </h1>
 <p>同步测试账户，核对状态，准备待签名交易。</p>
 <a class="activity-shortcut" href="#activity">查看交易记录 ↓</a>
+<a id="localSetupGuide" class="activity-shortcut" href="#localSetup" hidden>前往本地账户配对 ↓</a>
 </div>
+<details id="localStart" class="local-start">
+<summary>从零开始本地试签</summary>
+<p>在自己的电脑上安装 Git、Node.js 22 或更高版本和 Foundry，然后在终端运行以下命令。</p>
+<pre><code>git clone https://github.com/AURVENwallet/AURVEN.git
+cd AURVEN
+node scripts/local-wallet.mjs</code></pre>
+<p>打开终端显示的本机地址，设置演示密码并配对账户。按 Ctrl+C 可结束本次演示。</p>
+<a class="activity-shortcut" href="https://github.com/AURVENwallet/AURVEN#start-a-disposable-wallet" target="_blank" rel="noopener noreferrer">完整运行指南 ↗</a>
+</details>
 <section class="key-vault" aria-labelledby="vaultTitle">
 <div class="vault-header"><div><p class="eyebrow">YOUR KEYS / LOCAL VAULT</p><h2 id="vaultTitle">测试密钥，留在你的浏览器。</h2><p>在本机生成测试密钥，用独立密码加密保存。密码和密钥不会由此功能上传到服务器。</p></div><span class="vault-badge" id="vaultBadge">尚未创建</span></div>
 <div class="vault-layout"><div>
@@ -23,6 +33,13 @@
 <output class="vault-status" id="vaultStatus" aria-live="polite">正在检查本地存储…</output>
 </section>
 
+<section id="localSetup" class="key-vault" aria-labelledby="localSetupTitle" hidden>
+<div class="vault-header"><div><p class="eyebrow">LOCAL ANVIL / 31337</p><h2 id="localSetupTitle">配对你的演示账户</h2>
+<p>在上方设置密码创建演示密钥库，再将公开根写入这条临时链。账户已备好 1 枚本地测试币。</p></div></div>
+<button id="pairLocal" class="run" type="button" disabled>配对并准备转账</button>
+<output id="pairStatus" class="vault-status" aria-live="polite"></output>
+<a id="openLocalDraft" class="activity-shortcut" href="#wallet" hidden>查看已填好的转账 ↓</a>
+</section>
 <section class="proof-self-test" id="proofSelfTest" aria-labelledby="selfTestTitle">
 <div class="self-test-heading"><div><p class="eyebrow">SIGN / VERIFY · IN YOUR BROWSER</p><h2 id="selfTestTitle">让一次签名，可见、可验证。</h2><p>解锁测试密钥库，用独立验证树签署一条测试消息。每次签名前，先永久记录叶号。</p></div><span class="self-test-tag">本地自检 · 不发送交易</span></div>
 <div class="self-test-layout"><div class="self-test-controls">

@@ -3,6 +3,8 @@ import {TestVault} from './vault-service.js';
 import {MAX_BACKUP_BYTES} from './vault-crypto.js';
 import {verifyLocalProof} from './local-proof.js';
 const el=id=>document.getElementById(id);
+const sessionId=document.querySelector('meta[name="aurven-local-session"]')?.content;
+const sandboxStore=location.hostname==='127.0.0.1' && /^[a-f0-9]{32}$/.test(sessionId) ? 'aurven-sandbox-'+sessionId : undefined;
 const status=el('vaultStatus');
 let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
@@ -125,8 +127,8 @@ document.addEventListener('aurven:check-account-keys',event=>{
     '所选账户网络与密钥库不同，请使用对应网络的测试密钥库。':'账户信息已填入。解锁对应密钥库后开始核验。';
   location.hash='accountBinding';
 });
-el('accountKeyForm').addEventListener('submit',async event=>{
-  event.preventDefault();if(busy||!vault?.unlocked)return;
+async function checkAccountForm() {
+  if(busy||!vault?.unlocked)return;
   busy=true;checkingKeys=true;vault.cancelAccountCheck();
   notifyKeyChange();
   el('accountKeyProgressBox').hidden=false;el('accountKeyProgress').value=0;el('accountKeyPercent').textContent='0%';
@@ -137,9 +139,18 @@ el('accountKeyForm').addEventListener('submit',async event=>{
     });
     el('accountKeyStatus').textContent=result.matched?'密钥根与核验区块中的账户状态一致。此结果不启用交易签名。':
       '当前密钥库未能重建该账户的密钥根。请检查账户、网络和密钥库。';
+    return result;
   }catch(error){el('accountKeyStatus').textContent=errors[error.code]??'核验未完成，请检查账户地址、RPC 网络和连接后重试。';}
   finally{checkingKeys=false;busy=false;el('accountKeyProgressBox').hidden=true;render();}
-});
+}
+el('accountKeyForm').addEventListener('submit',event=>{event.preventDefault();void checkAccountForm();});
+export async function checkSandboxAccount(account,endpoint) {
+  if (!sandboxStore || !vault?.unlocked || vault.details.mode!=='active' || vault.details.chainId!==31337 ||
+      !/^0x[a-f0-9]{40}$/.test(account) || !/^http:\/\/127\.0\.0\.1:\d+\/$/.test(endpoint)) return;
+  el('accountKeyAddress').value=account;
+  el('accountKeyRpc').value=endpoint;
+  return checkAccountForm();
+}
 el('accountKeyCancel').addEventListener('click',()=>vault?.cancelAccountCheck());
 async function run(action){
   if(busy||!vault)return;
@@ -231,7 +242,7 @@ window.addEventListener('pagehide',()=>vault?.lock('hidden'));
 window.addEventListener('pageshow',()=>{vault?.lock('navigation');render();});
 try{
   if(!isSecureContext||!crypto.subtle||!navigator.locks)throw {code:'UNSUPPORTED'};
-  vault=new TestVault(await openVaultStore(),{onLock:reason=>{
+  vault=new TestVault(await openVaultStore(sandboxStore),{onLock:reason=>{
     notifyKeyChange();
     el('accountKeyProgressBox').hidden=true;
     el('accountKeyStatus').textContent='密钥库已锁定，核验结果已清除。';
