@@ -51,8 +51,22 @@ export function validateReservation(row){
 // Deliberately exclude account/epoch from uniqueness: moving the same key to a
 // different context must never make that one-time key reusable.
 export const reservationId=row=>row.pubSeed+':'+row.root+':'+row.leaf;
+export const handoverFields=Object.freeze(['format','chainId','account','epoch','oldSeed','oldRoot','newSeed','newRoot','deadline']);
+export function validateOffer(offer) {
+  if(!keys(offer,handoverFields) || offer.format!=='aurven-local-handover-v1' || offer.chainId!==31337 || offer.epoch!==1 ||
+    typeof offer.account!=='string'||!/^0x[0-9a-f]{40}$/.test(offer.account) || !Number.isSafeInteger(offer.deadline) || offer.deadline<=0 ||
+    !['oldSeed','oldRoot','newSeed','newRoot'].every(k=>typeof offer[k]==='string'&&/^0x[0-9a-f]{32}$/.test(offer[k])&&!/^0x0+$/.test(offer[k])) ||
+    offer.oldSeed===offer.newSeed || offer.oldRoot===offer.newRoot)fail('HANDOVER_OFFER');
+  return offer;
+}
 function validatePayload(value,record){
-  if(!keys(value,['seed','journal'])||!isHex(value.seed,64)||!Array.isArray(value.journal)||value.journal.length>MAX_RESERVATIONS)fail('FORMAT');
+  const fields=['seed','journal'];
+  if(value && Object.hasOwn(value,'handoverOffer')){
+    fields.push('handoverOffer');
+    if(record.chainId!==31337)fail('FORMAT');
+    validateOffer(value.handoverOffer);
+  }
+  if(!keys(value,fields)||!isHex(value.seed,64)||!Array.isArray(value.journal)||value.journal.length>MAX_RESERVATIONS)fail('FORMAT');
   const seen=new Set();
   for(const row of value.journal){
     validateReservation(row);

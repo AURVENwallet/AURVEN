@@ -82,6 +82,24 @@ node scripts/local-wallet.mjs</code></pre>
 <output id="pairStatus" class="vault-status" aria-live="polite"></output>
 <a id="openLocalDraft" class="activity-shortcut" href="#wallet" hidden>查看已填好的转账 ↓</a>
 </section>
+<details id="deviceHandover" class="local-start">
+<summary>在两个浏览器之间交接账户</summary>
+<p>这项演练使用本机临时链。先在原浏览器配对演示账户，再用另一个浏览器配置文件打开同一本机网址，创建独立的演示密钥库。</p>
+<div id="handoverStart"><pre><code>node scripts/local-wallet.mjs</code></pre><a class="activity-shortcut" href="https://github.com/AURVENwallet/AURVEN#rehearse-a-device-handover" target="_blank" rel="noopener noreferrer">本地交接指南 ↗</a></div>
+<div id="handoverControls" hidden><fieldset class="vault-fields" id="handoverFields">
+<label for="handoverRole">此浏览器的角色<select id="handoverRole"><option value="receive">接收设备</option><option value="send">原签名设备</option></select></label>
+<div id="handoverReceive"><button id="handoverPrepare" type="button">生成接收请求</button>
+<div id="handoverOfferBox" hidden><label for="handoverOutput">公开接收请求<textarea id="handoverOutput" rows="3" readonly spellcheck="false"></textarea></label>
+<p>在原设备粘贴公开请求，并通过另一个可信渠道核对下方指纹。</p><code id="handoverPrint"></code>
+<p>原设备提交后，请等待下一个本地区块，再核对交接回执。</p>
+<button id="handoverVerify" type="button">核对回执和本机密钥</button></div></div>
+<div id="handoverSend" hidden><label for="handoverInput">来自接收设备的公开请求<textarea id="handoverInput" rows="3" maxlength="1024" spellcheck="false"></textarea></label>
+<label for="handoverFingerprint">接收设备另行显示的指纹<input id="handoverFingerprint" maxlength="32" autocomplete="off" spellcheck="false"></label>
+<p>确认后，原设备会签署一笔本机换根交易，将这个演示账户交给接收设备。</p>
+<button id="handoverAuthorize" type="button">确认交接并提交本机交易</button></div></fieldset>
+<output id="handoverStatus" class="vault-status" aria-live="polite"></output>
+<a id="handoverContinue" class="activity-shortcut" href="#localSetup" hidden>前往配对并试签 ↓</a></div>
+</details>
 <section class="proof-self-test" id="proofSelfTest" aria-labelledby="selfTestTitle">
 <div class="self-test-heading"><div><p class="eyebrow">SIGN / VERIFY · IN YOUR BROWSER</p><h2 id="selfTestTitle">让一次签名，可见、可验证。</h2><p>解锁测试密钥库，用独立验证树签署一条测试消息。每次签名前，先永久记录叶号。</p></div><span class="self-test-tag">本地自检 · 不发送交易</span></div>
 <div class="self-test-layout"><div class="self-test-controls">

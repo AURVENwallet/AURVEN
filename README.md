@@ -40,6 +40,17 @@ The account starts with 1 local test coin. The simulated call leaves balances an
 
 Press Ctrl+C in the terminal to close the preview and its chain. Restarting creates a different account, chain and vault database. Encrypted records from earlier runs may remain in browser site data. The launcher uses Anvil state overrides to install the pinned account code and its initial balance, bypassing deployment and funding transactions. The website includes the same startup commands in Chinese and English under **Start a local signing demo**.
 
+### Rehearse a device handover
+
+Start the local wallet as above. Use two separate browser profiles on the same computer. Keep the launcher running throughout. The public website links to these instructions under **Hand over an account between browsers**.
+
+1. In the original profile, create the vault and pair the demo account.
+2. Open the same loopback URL in the receiving profile, create a fresh vault, then choose **Receiving device → Prepare receiving request**. Copy the public request. Read its 32-character fingerprint directly from this profile.
+3. In the original profile select **Original signer**, paste the request and enter the fingerprint obtained independently from the receiver. **Authorize handover and submit locally** signs a rotation on chain 31337. Keep the displayed transaction hash for reference.
+4. Wait for inclusion and one later local block. In the receiver choose **Check receipt and local key**. It can find the transaction by its event even after a reload. Follow **Continue to pairing and test signing** to simulate a transfer under the second key epoch.
+
+The receiver stores the request inside its encrypted vault and can unlock it again with its own password. The source reserves its rotation leaf before signing. If a submission is interrupted, check the receiver for a receipt. If there is still no receipt or the offer expired after reservation, restart the disposable launcher for a fresh rehearsal. A real handover requires a working original signer. Independent lost-device recovery and public-testnet handover remain open.
+
 ### Run the test suite and static website
 
 Requires Node.js 22+, Python 3 and Foundry 1.8.1. Solidity 0.8.33 is pinned in foundry.toml. The static website has no package-install or frontend build step.
@@ -263,7 +274,7 @@ BscTestAccount allows construction only on chains 97 and 31337; this restriction
 | Account creation and bootstrap | Disposable local demo completes direct deployment and bootstrap | Browser creation flow and BSC testnet deployment |
 | Seed generation, mnemonics and recovery | Local demo generates disposable public test seeds; browser custody remains pending | Encrypted storage, unlock and lock behavior, backup validation |
 | One-time key reservation | Local demo persists before signing and guards against concurrency within one process; webpage drafts do not reserve leaves | Cross-tab single-writer locking, crash and recovery tests |
-| Device handover and recovery reuse protection | Pending | One device in the first version, mandatory rotation after recovery, stale-copy detection |
+| Device handover and recovery reuse protection | Two-profile rotation drill on local Anvil | Public testnet confirmation policy, independent recovery and stale-copy detection remain open |
 | Account state and network checks | Fixed-block reads from one RPC, with runtime checks | Comparison against a second source, retries, continued refresh and error reporting |
 | Transaction signing, fees and broadcasting | Local script completes signing, simulation and broadcasting; webpage checks actual receipts | Browser signing interface, BSC fee policy and public-testnet acceptance |
 | Pending transactions and cancellation | Pending | Rebroadcast the same signature, handle timeouts, manage transaction nonces and leaf indices separately |

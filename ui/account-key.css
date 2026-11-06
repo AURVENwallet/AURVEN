@@ -16,3 +16,8 @@
 #backupChainResult{margin-top:16px}
 #backupAccountsLink,#backupInspectResult{color:#e5c06c;font-size:13px;line-height:1.8}
 #backupAccountsLink:not([hidden]),#backupInspectResult:not(:empty){display:block;margin-top:15px}
+#deviceHandover textarea{display:block;width:100%;box-sizing:border-box;margin:8px 0 14px;padding:12px;border:1px solid #62583f;border-radius:4px;background:#090b0c;color:#f1eee6;resize:vertical;font:12px/1.6 monospace}
+#deviceHandover code,#handoverStatus{overflow-wrap:anywhere}
+#handoverControls [hidden],#handoverContinue[hidden],#handoverControls[hidden]{display:none}
+#handoverControls fieldset{margin-top:18px}
+#deviceHandover{scroll-margin-top:96px}

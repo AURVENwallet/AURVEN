@@ -4,6 +4,7 @@ import {createEnvelope,decryptPayload,deriveVaultKey,encryptPayload,parseBackup,
 import {TestVault} from '../ui/vault-service.js';
 import {compareBackupJournal} from '../ui/backup-recovery.js';
 import {accountCodeHash} from '../ui/contract-pin.js';
+import {makeOffer} from '../ui/local-handover.js';
 import {TestSigningSession,hex} from '../ui/test-wallet-core.js';
 import {EvmTreeKey,leafPk,rootFromProof} from '../ui/lib/evmwots.js';
 
@@ -36,6 +37,28 @@ const row={chainId:31337,account:'0x'+'11'.repeat(20),epoch:1,pubSeed:'22'.repea
 async function session(store=new MemoryStore(),locks=new Locks(),options={}){
   const vault=new TestVault(store,{locks,...options});await vault.unlock(passphrase);return {vault,store,locks};
 }
+
+test('local receiving requests survive lock in the authenticated vault and imports cannot become handover signers',async()=>{
+  const payload=await decryptPayload(base.record,base.key);
+  const offer=makeOffer({chainId:31337,account:row.account,epoch:1,pubSeed:'0x'+row.pubSeed,root:'0x'+row.root,
+    timestamp:Math.floor(Date.now()/1000)},'0x'+'55'.repeat(16),'0x'+'66'.repeat(16));
+  payload.handoverOffer=offer;
+  await assert.rejects(encryptPayload(payload,base.key,{...base.record,chainId:97}),code('FORMAT'));
+  const encrypted=await encryptPayload(payload,base.key,base.record);
+  const store=new MemoryStore(encrypted);store.name='aurven-sandbox-'+'12'.repeat(16);
+  const {vault}=await session(store);
+  assert.deepEqual(vault.receivingOffer,offer);
+  vault.receivingOffer.newRoot='bad';assert.equal(vault.receivingOffer.newRoot,offer.newRoot);
+  const backup=await vault.exportBackup();assert.ok(!backup.includes(offer.newRoot));
+  vault.lock();assert.equal(vault.receivingOffer,null);
+  await vault.unlock(passphrase);assert.deepEqual(vault.receivingOffer,offer);vault.lock();
+  const restoredStore=new MemoryStore(null);restoredStore.name=store.name;
+  const restored=new TestVault(restoredStore,{locks:new Locks()});await restored.restoreBackup(backup,passphrase);
+  assert.equal(restored.receivingOffer,null);
+  await assert.rejects(restored.localHandover({account:row.account,endpoint:'https://example.org'}),code('RECOVERY'));restored.lock();
+  const ordinary=(await session(new MemoryStore(encrypted))).vault;
+  await assert.rejects(ordinary.localHandover({account:row.account}),code('SIGN_LOCAL'));ordinary.lock();
+});
 
 test('a saved backup is authenticated and compared without updating or replacing the active vault',async()=>{
   const {vault,store}=await session();

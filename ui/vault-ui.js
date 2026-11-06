@@ -9,6 +9,8 @@ const status=el('vaultStatus');
 let checkedBackupRevision, candidateList;
 let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
+  HANDOVER_RECEIPT:'未能核实规范区块中的换根回执。',
+  HANDOVER_PENDING:'尚未确认接收根及后续区块。请等待打包后再核对。',
   BACKUP_SOURCE:'这份文件与当前密钥库不对应。',
   BACKUP_INVALID:'无法验证备份文件，请检查文件是否完整。',
   RECOVERY_NODES:'两个测试网节点未能确认同一区块，请稍后重试。',
@@ -211,6 +213,13 @@ export async function checkSandboxAccount(account,endpoint) {
   return checkAccountForm();
 }
 el('accountKeyCancel').addEventListener('click',()=>vault?.cancelAccountCheck());
+export async function sandboxHandover(request){
+  if(!sandboxStore||busy||!vault?.unlocked)throw {code:'LOCKED'};
+  busy=true;render();
+  try{return await vault.localHandover(request);}
+  finally{busy=false;render();}
+}
+export function savedSandboxOffer(){return sandboxStore?vault?.receivingOffer:null;}
 async function run(action){
   if(busy||!vault)return;
   busy=true;render();status.textContent='正在处理本地加密数据…';

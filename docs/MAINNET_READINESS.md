@@ -59,9 +59,15 @@ On 2026-11-06 a mobile-width Edge drill used two endpoint routes backed by a dis
 
 Two isolated Edge profiles exercised device loss on a disposable local chain configured as chain 97. The first profile created a three-wei account and saved a backup. The second imported it and found the candidate address before making an account lookup. The first profile then spent one wei. Comparing its earlier file reported an older journal. Comparing a fresh export reported matching records.
 
-Two endpoint routes served the same local chain. The restored profile rebuilt the matching active root, read two wei and identified leaf 0 as missing from the backup. Disconnecting one endpoint cleared the result. Reloading and unlocking kept the imported profile read-only. Device handover and independent authorization after losing the original signer still require a protocol and review.
+Two endpoint routes served the same local chain. The restored profile rebuilt the matching active root, read two wei and identified leaf 0 as missing from the backup. Disconnecting one endpoint cleared the result. Reloading and unlocking kept the imported profile read-only. The local handover drill below covers a working original signer. Independent authorization after losing that signer remains open.
 
 A separate read-only run queried the public BSC testnet sample account at block 141095378 from a newly restored, unrelated vault. Both endpoints returned epoch 2, next leaf 1 and zero wei. The local root comparison correctly reported a mismatch.
+
+### Local two-profile handover
+
+Two isolated Edge profiles exercised the local launcher on chain 31337. The original profile paired the account and signed a simulated transfer at epoch 1. The receiving profile generated its own epoch-2 root. An incorrect fingerprint consumed no source leaf. The original profile then submitted the rotation using leaf 960. After a reload, the receiver checked the retired-key proof, exact calldata, receipt, canonical inclusion and current root. Its first transfer simulation succeeded. Replaying the old, unexpired transfer at the same address returned `BadSignature`.
+
+The drill requires one subsequent local block. Automated checks cover an altered or expired offer and a chain rollback. Public-testnet confirmation policy, multiple independent observations, interrupted submissions, historical-root enforcement and independent lost-device recovery remain open. [Run the two-profile drill](../README.md#rehearse-a-device-handover).
 
 ## Disposable browser transfer
 

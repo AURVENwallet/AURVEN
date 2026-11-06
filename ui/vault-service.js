@@ -9,6 +9,8 @@ import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-k
 import {encodeNetworkAction,setup,spendingLeaf,validateIntent,validateNetworkPlan} from './vault-network-proof.js';
 import {verifyNetworkPlanState} from './signing-preflight.js';
 import {compareBackupJournal, readRecoveryAccount, recoveryJournalReview} from './backup-recovery.js';
+import {checkSource,confirmLocalHandover,offerFingerprint,readHandoverState,rotationMessage,sendLocalRotation} from './local-handover.js';
+import {EXEC_LIMIT} from './lib/evmwots.js';
 
 export class TestVault {
   #key;#walletId;#revision=0;#generation=0;#timer;#deadline=0;#details=null;#observed=new Map();
@@ -16,6 +18,7 @@ export class TestVault {
   #bindingWorker;#bindingAbort;#bindingGeneration=0;#bindingResult;#reviewTicket;
   #reserved;#simulationAbort;
   #networkWorker;
+  #handoverWorker;#handoverOffer;#localSandbox;
   #recoveredAccounts=[];
   constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
     bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,recoveryReader=readRecoveryAccount,networkPreflight=verifyNetworkPlanState,
@@ -26,10 +29,12 @@ export class TestVault {
     this.bindingWorkerFactory=bindingWorkerFactory;this.accountReader=accountReader;this.transferWorkerFactory=transferWorkerFactory;
     this.networkWorkerFactory=networkWorkerFactory;this.networkPreflight=networkPreflight;
     this.recoveryReader=recoveryReader;
+    this.#localSandbox=/^aurven-sandbox-[0-9a-f]{32}$/.test(store.name);
   }
   get unlocked(){if(this.#key&&this.now()>=this.#deadline)this.lock('idle');return !!this.#key;}
   get details(){return this.#details?{...this.#details,unlocked:this.unlocked}:null;}
   get recoveredAccounts(){return this.unlocked ? [...this.#recoveredAccounts] : [];}
+  get receivingOffer(){return this.unlocked&&this.#handoverOffer?{...this.#handoverOffer}:null;}
   touch(){
     if(!this.#key)return;
     if(this.now()>=this.#deadline){this.lock('idle');return;}
@@ -37,6 +42,8 @@ export class TestVault {
   }
   #arm(){clearTimeout(this.#timer);this.#deadline=this.now()+this.idleMs;this.#timer=setTimeout(()=>this.lock('idle'),this.idleMs);this.#timer.unref?.();}
   lock(reason='manual'){
+    this.#handoverOffer=undefined;
+    this.#handoverWorker?.dispose();this.#handoverWorker=undefined;
     this.#recoveredAccounts=[];
     this.#networkWorker?.dispose();this.#networkWorker=undefined;
     const hadKey=!!this.#key;this.#generation++;this.#key=undefined;this.#walletId=undefined;
@@ -47,6 +54,7 @@ export class TestVault {
   #capture(){if(!this.unlocked)fail('LOCKED');return {key:this.#key,generation:this.#generation,id:this.#walletId};}
   #check(context){if(!this.unlocked||context.generation!==this.#generation||context.id!==this.#walletId)fail('LOCKED');}
   #setDetails(record,payload){
+    this.#handoverOffer=this.#localSandbox&&record.mode==='active'?payload?.handoverOffer:undefined;
     this.#recoveredAccounts=record.mode==='recovery-readonly' && record.chainId===97 && payload ?
       [...new Set(payload.journal.map(row=>row.account).filter(account=>account!==PROOF_ACCOUNT))] : [];
     this.#details={walletId:record.walletId,chainId:record.chainId,createdAt:record.createdAt,mode:record.mode,
@@ -144,6 +152,63 @@ export class TestVault {
     });
   }
   get proofTree(){return this.unlocked&&this.#proofTree?{...this.#proofTree}:null;}
+  // These operations are limited to the random database of a running loopback launcher.
+  async localHandover({endpoint,account,offer,fingerprint}) {
+    const context=this.#capture();
+    if(!this.#localSandbox ||
+        !/^0x[0-9a-f]{40}$/.test(account))fail('SIGN_LOCAL');
+    if(offer){
+      offer=structuredClone(offer);
+      if(offer.account!==account || !fingerprint || offerFingerprint(offer)!==fingerprint)fail('HANDOVER_FINGERPRINT');
+    }
+    return this.#exclusive(async()=>{
+      const {record,payload}=await this.#load(context);
+      if(record.chainId!==31337||record.mode!=='active')fail('RECOVERY');
+      const observe=async()=>{
+        const state=await readHandoverState(endpoint,account);this.#check(context);
+        if(offer)checkSource(offer,state);
+        return state;
+      };
+      const state=await observe();
+      if(state.epoch!==1||/^0x0+$/.test(state.root))fail('HANDOVER_STALE');
+      const worker=new ProofWorkerClient(new URL('./local-handover-worker.js',import.meta.url));
+      this.#handoverWorker=worker;
+      let committed=false;
+      try{
+        if(!offer){
+          const previous=payload.handoverOffer;
+          if(previous && previous.deadline>=state.timestamp){
+            checkSource(previous,state);return {...previous};
+          }
+          const result=await worker.request('offer',{record,key:context.key,state});
+          checkSource(result,await observe());
+          payload.handoverOffer=result;
+          const updated=await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
+          this.#check(context);await this.store.compareAndSwap(record,updated);this.#check(context);
+          this.#remember(updated);this.#revision=updated.revision;this.#setDetails(updated,payload);
+          return {...result};
+        }
+        const binding=this.accountCheck;
+        if(!binding?.matched||binding.account!==account||!keyStateEqual(binding.snapshot,state))fail('NET_KEYS');
+        if(payload.journal.some(r=>r.root===offer.newRoot.slice(2) ||
+          (r.root===offer.oldRoot.slice(2)&&r.pubSeed===offer.oldSeed.slice(2)&&r.leaf>=EXEC_LIMIT)))fail('HANDOVER_SPENT');
+        if(payload.journal.length>=MAX_RESERVATIONS)fail('FULL');
+        const message=rotationMessage(offer);
+        const row=validateReservation({chainId:31337,account,epoch:1,pubSeed:offer.oldSeed.slice(2),
+          root:offer.oldRoot.slice(2),leaf:EXEC_LIMIT,digest:message.digest});
+        payload.journal.push(row);
+        const updated=await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
+        await observe();await this.store.compareAndSwap(record,updated);committed=true;this.#check(context);
+        this.#remember(updated);this.#revision=updated.revision;this.#setDetails(updated,payload);
+        const data=await worker.request('rotate',{record:updated,key:context.key,offer,message});
+        this.#check(context);
+        return await sendLocalRotation(endpoint,offer,data,()=>this.#check(context));
+      }catch(error){
+        if(committed)fail('HANDOVER_CHECK_RECEIPT');
+        throw error;
+      }finally{worker.dispose();if(this.#handoverWorker===worker)this.#handoverWorker=undefined;}
+    });
+  }
   cancelProof(){this.#proofGeneration++;this.#proofWorker?.dispose();this.#proofWorker=undefined;this.#proofTree=undefined;}
   async buildProofTree(progress){
     const context=this.#capture(),generation=this.#proofGeneration;
@@ -279,6 +344,13 @@ export class TestVault {
       return nextTransferLeaf(state,payload.journal);
     });
   }
+  async #checkHandoverReceipt(state,endpoint,offer) {
+    if(!this.#localSandbox || state.epoch<2)return;
+    if(!offer)fail('HANDOVER_RECEIPT');
+    if(offer.account!==state.account || state.chainId!==31337 || state.epoch!==2 ||
+      offer.newSeed!==state.pubSeed || offer.newRoot!==state.root)fail('HANDOVER_RECEIPT');
+    await confirmLocalHandover(endpoint,offer);
+  }
   async reviewTransferDraft(input, endpoint, signal) {
     this.#reviewTicket = undefined;
     return this.#checkTransferDraft(input,endpoint,signal);
@@ -312,6 +384,7 @@ export class TestVault {
         if (payload.journal.length >= MAX_RESERVATIONS) fail('FULL');
         const state = validateKeySnapshot(raw,draft.chainId,account);
         compareDraftState(draft,{...state,balanceWei:raw.balanceWei},binding,payload.journal,reviewed);
+        await this.#checkHandoverReceipt(state,endpoint,payload.handoverOffer);current();
         const report = Object.freeze({digest:draft.digest, leaf:draft.leaf, blockNumber:state.blockNumber, blockHash:state.blockHash});
         if (!reviewed) {
           this.#reviewTicket = report;
@@ -371,6 +444,7 @@ export class TestVault {
         if (record.mode !== 'active' || record.chainId !== 31337) fail('SIGN_LOCAL');
         const row = reservedRow(payload.journal,draft);
         if (row.simulationAttempt) fail('SIGN_RESERVATION');
+        await this.#checkHandoverReceipt(before,endpoint,payload.handoverOffer);current();
         row.simulationAttempt = true;
         const updated = await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
         current();
@@ -385,6 +459,7 @@ export class TestVault {
         proof = await worker.request('sign-local',{record:updated,key:context.key,draft});
         current();
         const after = await readState(before);
+        await this.#checkHandoverReceipt(after,endpoint,payload.handoverOffer);
         current();
         const result = await simulateLocalProof(endpoint,draft,after,proof,cancel);
         current();

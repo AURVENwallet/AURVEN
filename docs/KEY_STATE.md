@@ -78,7 +78,9 @@ Tabs sharing the same origin, browser storage partition and database cooperate t
 
 The first-version operating rule is one signing device per tree. Do not clone a browser profile or unlock independent active copies for signing. Simultaneous multi-device signing would need a separately designed, trusted coordination mechanism or disjoint key authority with enforced allocation; neither exists here.
 
-A supported future device handover must be authorized by a device with trusted current key state, rotate the on-chain account to a fresh tree controlled by the new device, and verify confirmation before the new device signs. The old tree is then retired. This handover workflow is not yet implemented.
+The [local two-profile drill](../README.md#rehearse-a-device-handover) implements the first handover from epoch 1 to epoch 2 on the launcher's disposable Anvil account. The receiver derives a fresh tree from its own master seed, account, chain, next epoch and random public seed. It checks that its journal is empty and that its seed cannot reconstruct the source tree. The encrypted vault saves the receiving request before displaying it. Both sides fingerprint a fixed-order encoding of the request with the first 128 bits of Keccak-256. The user must compare this fingerprint through an independent trusted channel.
+
+The source matches its current root and commits leaf 960 and the rotation digest to its encrypted journal before its worker signs. It permits one rotation attempt per source tree in this drill. The receiver finds the matching Rekeyed event, checks canonical inclusion and one later block, verifies the actual transaction input and old-tree proof against its saved offer, and reconstructs its own new root. Draft review, reservation and simulation on the new tree repeat receipt checks. Rolling back the local chain invalidates the handover evidence. A full rollback of a browser profile can still erase off-chain history. Public testnet handover needs a confirmation policy, independent sources and interruption/reorganization drills.
 
 ## Why importing a backup cannot resume signing
 
