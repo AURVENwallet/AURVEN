@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {verifyNetworkPlanState} from '../ui/signing-preflight.js';
+import {readRecoveryAccount} from '../ui/backup-recovery.js';
+import {secondaryTestnet} from '../ui/testnet-heads.js';
 import {submitNetwork} from '../ui/network-account.js';
 import {createdAddress} from '../ui/browser-trial.js';
 import {keccak256} from '../ui/lib/keccak.js';
@@ -14,11 +16,11 @@ const bytecode=JSON.parse(readFileSync(new URL('../out/BscTestAccount.sol/BscTes
 const plan={id:'preview',walletId:'test',kind:'send',chainId:97,payer:addr('1'),account:addr('2'),recipient:addr('3'),
   nonce:'0x4',value:'0x0',gas:'0xaae60',gasPrice:'0x1',deadline:Math.floor(Date.now()/1000)+600};
 const root=getter('root()'),next=getter('next()');
-function environment(t) {
+function environment(t,peerOrigin=secondary) {
   const control={mode:'normal'},requests=[];
   const stamp=Math.floor(Date.now()/1000);
   t.mock.method(globalThis,'fetch',async(url,o)=>{
-    const peer=url.startsWith(secondary),{id,method,params}=JSON.parse(o.body);
+    const peer=url.startsWith(peerOrigin),{id,method,params}=JSON.parse(o.body);
     requests.push({peer,method,params});
     if (peer && control.mode==='down') throw new TypeError('offline');
     let result;
@@ -51,6 +53,18 @@ function environment(t) {
   return {control,requests};
 }
 const read=p=>verifyNetworkPlanState(p,primary,secondary);
+test('backup recovery checks the same block, bytecode, keys and balance on both built-in testnet nodes',async t=>{
+  const {control,requests}=environment(t,secondaryTestnet);
+  const read=()=>readRecoveryAccount({account:plan.account,signal:new AbortController().signal});
+  const result=await read();
+  assert.deepEqual([result.blockNumber,result.epoch,result.next,result.balanceWei],['0xe',2,1,'8']);
+  for(const peer of [false,true])assert.ok(requests.some(r=>r.peer===peer && r.method==='eth_getCode' && r.params[1]==='0xe'));
+  for(const [mode,error] of [['down','RECOVERY_NODES'],['wrongChain','RECOVERY_NODES'],['fork','RECOVERY_CONFLICT'],
+    ['code','RECOVERY_ACCOUNT'],['root','RECOVERY_CONFLICT'],['balance','RECOVERY_CONFLICT']]){
+    control.mode=mode;await assert.rejects(read(),e=>e.code===error);
+  }
+  assert.ok(requests.every(r=>['eth_chainId','eth_getBlockByNumber','eth_call','eth_getCode','eth_getBalance'].includes(r.method)));
+});
 test('signing preview binds both sources to a shared block and checks the faster head for advanced keys',async t=>{
   const {control,requests}=environment(t);
   const result=await read(plan);

@@ -10,3 +10,9 @@
 .local-start summary { width: fit-content; color: #e9c66c; cursor: pointer; font-weight: 600; }
 .local-start p { color: #bdc2b9; line-height: 1.6; }
 .local-start pre { width: fit-content; max-width: 100%; padding: 14px; border-left: 2px solid #ae8e44; background: #101111; color: #ece2c8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.account-key-fields select{box-sizing:border-box;display:block;width:100%;min-width:0;margin:9px 0;padding:12px;background:#090c0d;color:#f0efe8;border:1px solid #474636;border-radius:4px;font:inherit}
+#backupSourceChoice input{display:inline-block;width:auto;margin:0 8px 0 0;accent-color:#f0c344}
+#backupLookup .account-key-note{margin:0 0 16px}
+#backupChainResult{margin-top:16px}
+#backupAccountsLink,#backupInspectResult{color:#e5c06c;font-size:13px;line-height:1.8}
+#backupAccountsLink:not([hidden]),#backupInspectResult:not(:empty){display:block;margin-top:15px}

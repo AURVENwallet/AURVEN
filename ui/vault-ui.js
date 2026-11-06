@@ -6,8 +6,14 @@ const el=id=>document.getElementById(id);
 const sessionId=document.querySelector('meta[name="aurven-local-session"]')?.content;
 const sandboxStore=location.hostname==='127.0.0.1' && /^[a-f0-9]{32}$/.test(sessionId) ? 'aurven-sandbox-'+sessionId : undefined;
 const status=el('vaultStatus');
+let checkedBackupRevision, candidateList;
 let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
+  BACKUP_SOURCE:'这份文件与当前密钥库不对应。',
+  BACKUP_INVALID:'无法验证备份文件，请检查文件是否完整。',
+  RECOVERY_NODES:'两个测试网节点未能确认同一区块，请稍后重试。',
+  RECOVERY_ACCOUNT:'未能在两个测试网节点读取此版本的账户，请检查地址或稍后重试。',
+  RECOVERY_CONFLICT:'两个测试网节点的数据不一致，本次未生成核验结果。',
   SIGN_LOCAL:'本地试签仅支持本机 Anvil 节点和链号 31337。',
   SIGN_RESERVATION:'此预留已不可用于试签。请生成新草稿并重新预留。',
   SIMULATION:'本地合约模拟未通过。叶号仍已占用，请重新生成草稿。',
@@ -73,6 +79,8 @@ function render(){
   el('vaultSetup').hidden=exists;el('vaultExisting').hidden=!exists;
   el('vaultUnlockForm').hidden=unlocked;el('vaultActions').hidden=!unlocked;
   el('vaultRecovery').hidden=details?.mode!=='recovery-readonly';
+  el('backupInspect').hidden=!unlocked||details?.mode!=='active';
+  if(!unlocked||details?.revision!==checkedBackupRevision)el('backupInspectResult').textContent='';
   el('vaultBadge').textContent=!exists?'尚未创建':unlocked?'已解锁':'已锁定';
   el('vaultBadge').dataset.state=unlocked?'open':'locked';
   el('vaultId').textContent=details?.walletId??'—';
@@ -86,11 +94,45 @@ function render(){
 }
 function renderAccountCheck(){
   const result=vault?.accountCheck;
+  const recovery=!!vault?.unlocked&&details?.mode==='recovery-readonly'&&details.chainId===97;
+  el('backupLookup').hidden=el('backupSourceChoice').hidden=el('backupAccountsLink').hidden=!recovery;
+  const addresses=recovery?vault.recoveredAccounts:[];
+  const listKey=recovery?addresses.join(','):null;
+  if(listKey!==candidateList){
+    const select=el('backupCandidates');
+    select.replaceChildren(new Option('手动输入账户地址',''),...addresses.map(a=>new Option(a,a)));
+    if(recovery&&addresses.length&&!el('accountKeyAddress').value){
+      select.value=addresses[0];el('accountKeyAddress').value=addresses[0];
+    }
+    candidateList=listKey;
+  }
+  el('backupCandidateHint').textContent=!recovery?'':addresses.length?
+    '地址来自备份中的预留记录，需核对链上部署。点击核验后才会查询该地址。':
+    '这份备份没有记录账户地址。若另存了地址，可手动输入。';
+  const dual=recovery&&!el('backupCustomRpc').checked;
+  el('accountKeyRpcField').hidden=el('accountKeyRpc').disabled=dual;
+  el('accountKeyRpc').required=!dual;
+  el('accountKeyCheck').textContent=dual?'用两个测试网节点核验':'重建密钥树并核验';
   el('accountKeyFields').disabled=busy||!vault?.unlocked;
   el('accountKeyCancel').hidden=!checkingKeys;
   el('accountKeyNetwork').textContent=details?.chainId===97?'BSC Testnet · 97':details?.chainId===31337?'Anvil · 31337':'—';
   el('accountKeyResult').hidden=!result;
-  if(!result)return;
+  el('accountKeySourceNote').textContent=!result?'':result.backupReview?
+    '两处测试网节点在所示区块报告了相同的账户状态。':
+    '结果只对应所示区块和当前解锁会话，不是可对外验证的所有权证明。单个 RPC 仍可能提供错误信息。';
+  el('backupChainResult').hidden=!result?.backupReview;
+  for(const id of ['backupBalance','backupRowCount','backupLastLeaf'])el(id).textContent='';
+  if(!result){
+    for(const id of ['accountKeyOutcome','accountKeyDerived','accountKeyOnchain','accountKeyEpoch','accountKeyNext','accountKeyBlock','accountKeyTime'])el(id).textContent='';
+    return;
+  }
+  if(result.backupReview){
+    el('backupBalance').textContent=result.snapshot.balanceWei+' wei';
+    el('backupRowCount').textContent=String(result.backupReview.currentTreeReservations);
+    const recorded=result.backupReview.lastChainLeafRecorded;
+    el('backupLastLeaf').textContent=recorded===null?'本代尚未消耗链上叶号。':
+      '#'+(result.snapshot.next-1)+(recorded?' · 备份中有此预留记录。':' · 备份中缺少此预留记录。');
+  }
   el('accountKeyOutcome').textContent=result.matched?'密钥根匹配':'密钥根不匹配';
   el('accountKeyOutcome').dataset.match=String(result.matched);
   el('accountKeyDerived').textContent=result.derivedRoot;el('accountKeyOnchain').textContent=result.snapshot.root;
@@ -126,12 +168,19 @@ export async function authorizeNetwork(plan,progress) {
   try {return await vault.authorizeNetworkAction(plan,progress);}
   finally {details=await vault.inspect();render();}
 }
-el('accountKeyForm').addEventListener('input',()=>{
+el('accountKeyForm').addEventListener('input',event=>{
+  if(event.target===el('backupCandidates'))el('accountKeyAddress').value=event.target.value;
+  if(event.target===el('accountKeyAddress'))el('backupCandidates').value=
+    vault?.recoveredAccounts.includes(event.target.value.toLowerCase())?event.target.value.toLowerCase():'';
   clearAccountCheck();el('accountKeyStatus').textContent='信息已修改，请重新核验。';
 });
 document.addEventListener('aurven:check-account-keys',event=>{
   if(checkingKeys)vault?.cancelAccountCheck();else clearAccountCheck();
   el('accountKeyAddress').value=event.detail.account;el('accountKeyRpc').value=event.detail.endpoint;
+  if(vault?.unlocked&&details?.mode==='recovery-readonly'){
+    el('backupCandidates').value=event.detail.account.toLowerCase();
+    el('backupCustomRpc').checked=!!event.detail.endpoint;renderAccountCheck();
+  }
   el('accountKeyStatus').textContent=details&&details.chainId!==event.detail.chainId?
     '所选账户网络与密钥库不同，请使用对应网络的测试密钥库。':'账户信息已填入。解锁对应密钥库后开始核验。';
   location.hash='accountBinding';
@@ -143,7 +192,8 @@ async function checkAccountForm() {
   el('accountKeyProgressBox').hidden=false;el('accountKeyProgress').value=0;el('accountKeyPercent').textContent='0%';
   el('accountKeyStatus').textContent='读取账户并重建对应密钥树，完成后会再次核对链上状态。';render();
   try{
-    const result=await vault.checkAccountKeys({account:el('accountKeyAddress').value,endpoint:el('accountKeyRpc').value.trim()},value=>{
+    const result=await vault.checkAccountKeys({account:el('accountKeyAddress').value,endpoint:el('accountKeyRpc').value.trim(),
+      fromBackup:!el('backupLookup').hidden&&!el('backupCustomRpc').checked},value=>{
       el('accountKeyProgress').value=Math.round(value*1024);el('accountKeyPercent').textContent=Math.round(value*100)+'%';
     });
     el('accountKeyStatus').textContent=result.matched?'密钥根与核验区块中的账户状态一致。此结果不启用交易签名。':
@@ -201,6 +251,21 @@ el('vaultRestoreForm').addEventListener('submit',event=>{
   });
 });
 el('vaultLock').addEventListener('click',()=>{vault?.lock();render();});
+el('backupInspectFile').addEventListener('change',()=>{el('backupInspectResult').textContent='';});
+el('backupInspectForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  run(async()=>{
+    const file=el('backupInspectFile').files[0];
+    el('backupInspectResult').textContent='';
+    if(!file||file.size>MAX_BACKUP_BYTES)throw {code:'FORMAT'};
+    const report=await vault.checkBackupFile(await file.text());
+    checkedBackupRevision=report.checkedRevision;
+    const verdict={matches:'核对时，本机与备份的使用记录一致。',older:'这份备份落后于本机记录，请重新导出。',different:'使用记录出现分歧，无法确认这份备份的完整性。'};
+    el('backupInspectResult').textContent=verdict[report.status]+' '+
+      '备份记录数 '+report.savedCount+' / '+'本机记录数 '+report.currentCount;
+    status.textContent='已完成本机备份核对。';
+  });
+});
 el('vaultExport').addEventListener('click',()=>run(async()=>{
   const backup=await vault.exportBackup();
   const url=URL.createObjectURL(new Blob([backup],{type:'application/json'}));
@@ -252,6 +317,9 @@ window.addEventListener('pageshow',()=>{vault?.lock('navigation');render();});
 try{
   if(!isSecureContext||!crypto.subtle||!navigator.locks)throw {code:'UNSUPPORTED'};
   vault=new TestVault(await openVaultStore(sandboxStore),{onLock:reason=>{
+    if(details?.mode==='recovery-readonly')el('accountKeyAddress').value='';
+    el('backupCustomRpc').checked=false;el('backupInspectFile').value='';
+    el('backupInspect').open=false;checkedBackupRevision=undefined;
     notifyKeyChange();
     el('accountKeyProgressBox').hidden=true;
     el('accountKeyStatus').textContent='密钥库已锁定，核验结果已清除。';

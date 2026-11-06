@@ -46,9 +46,14 @@ node scripts/local-wallet.mjs</code></pre>
 </fieldset></form>
 <details class="vault-restore"><summary>已有加密测试备份？</summary><form id="vaultRestoreForm"><fieldset class="vault-fields" disabled><p>恢复仅供核对。本版本不会让恢复的旧备份继续签名，避免重复使用一次性密钥。</p><label for="vaultFile">选择加密备份<input id="vaultFile" type="file" accept=".json,application/json" required></label><label for="vaultBackupPassword">备份密码<input id="vaultBackupPassword" type="password" maxlength="256" required autocomplete="current-password"></label><button type="submit">恢复为只读密钥库</button></fieldset></form></details></div>
 <div id="vaultExisting" hidden><dl class="vault-meta"><dt>密钥库编号</dt><dd><code id="vaultId">—</code></dd><dt>测试网络</dt><dd id="vaultNetwork">—</dd><dt>已记录的密钥使用</dt><dd id="vaultRecords">—</dd></dl>
-<p class="vault-recovery" id="vaultRecovery" hidden>此密钥库来自备份，仅供查看和导出。恢复后的签名功能尚未开放。</p>
+<p class="vault-recovery" id="vaultRecovery" hidden>此密钥库来自备份，可查看账户和导出文件。原设备仍持有签名权限。</p>
 <form id="vaultUnlockForm"><fieldset class="vault-fields" disabled><label for="vaultPassword">密钥库密码<input id="vaultPassword" type="password" maxlength="256" required autocomplete="current-password"></label><button type="submit" class="run">解锁测试密钥库 <span aria-hidden="true">↗</span></button></fieldset></form>
-<div class="vault-actions" id="vaultActions" hidden><button type="button" class="run" id="vaultExport">导出加密备份</button><button type="button" id="vaultLock">立即锁定</button></div></div>
+<div class="vault-actions" id="vaultActions" hidden><button type="button" class="run" id="vaultExport">导出加密备份</button><button type="button" id="vaultLock">立即锁定</button></div>
+<details id="backupInspect" class="vault-restore" hidden><summary>检查已保存的备份</summary>
+<form id="backupInspectForm"><fieldset class="vault-fields" disabled><label for="backupInspectFile">选择要核对的备份<input id="backupInspectFile" type="file" accept=".json,application/json" required></label>
+<p>在此设备解密文件，与当前密钥库的使用记录逐条比对。文件只在本机读取。</p><button type="submit">核对本机记录</button></fieldset></form>
+<output id="backupInspectResult" aria-live="polite"></output></details>
+<a href="#accountBinding" id="backupAccountsLink" hidden>查看备份中的账户 ↓</a></div>
 </div><aside class="vault-info"><ol><li><strong>在本机加密</strong><p>密钥库保存在当前浏览器。清除网站数据会移除本地记录，请保存加密备份。</p></li><li><strong>离开即锁定</strong><p>切到后台、离开页面或两分钟无操作后自动锁定。重新使用时需要密码。</p></li><li><strong>备份与密码分开保存</strong><p>备份文件经过加密，但仍应私密保管。密码遗失后无法替你找回。</p></li></ol><p class="vault-scope">支持消息签名自检、本机转账试签，以及在 BSC 测试网上连续转账和轮换密钥。</p></aside></div>
 <output class="vault-status" id="vaultStatus" aria-live="polite">正在检查本地存储…</output>
 </section>
@@ -99,8 +104,11 @@ node scripts/local-wallet.mjs</code></pre>
 <div class="account-key-heading"><p class="eyebrow">KEYS / ACCOUNT · ROOT COMPARISON</p><h2 id="accountKeyTitle">这个账户，对应这把密钥吗？</h2><p>从当前测试密钥库重建账户密钥树，比较链上根。核验不生成签名，不消耗叶号，也不会启用交易权限。</p></div>
 <div class="account-key-layout"><div><span class="account-key-network" id="accountKeyNetwork">—</span>
 <form id="accountKeyForm"><fieldset id="accountKeyFields" class="account-key-fields" disabled>
+<div id="backupLookup" hidden><label for="backupCandidates">备份中的候选地址<select id="backupCandidates"><option value="">手动输入账户地址</option></select></label>
+<p id="backupCandidateHint" class="account-key-note"></p></div>
 <label for="accountKeyAddress">待核验的智能账户<input id="accountKeyAddress" required pattern="0x[0-9a-fA-F]{40}" maxlength="42" placeholder="0x…" autocomplete="off"></label>
-<label for="accountKeyRpc">核验用测试 RPC<input id="accountKeyRpc" type="url" required placeholder="HTTPS 测试网 RPC，或 http://127.0.0.1:8950" autocomplete="off"></label>
+<div id="backupSourceChoice" hidden><label><input id="backupCustomRpc" type="checkbox">使用自选单节点核验</label></div>
+<div id="accountKeyRpcField"><label for="accountKeyRpc">核验用测试 RPC<input id="accountKeyRpc" type="url" required placeholder="HTTPS 测试网 RPC，或 http://127.0.0.1:8950" autocomplete="off"></label></div>
 <button class="run" type="submit" id="accountKeyCheck">重建密钥树并核验</button></fieldset></form>
 <div id="accountKeyProgressBox" class="account-key-progress" hidden><span>正在重建账户密钥树</span> <span id="accountKeyPercent">0%</span><progress id="accountKeyProgress" max="1024" value="0" aria-label="账户密钥树生成进度"></progress></div>
 <button type="button" id="accountKeyCancel" hidden>取消账户核验</button>
@@ -109,8 +117,9 @@ node scripts/local-wallet.mjs</code></pre>
 <div id="accountKeyResult" class="account-key-result" hidden><h3 id="accountKeyOutcome"></h3><dl>
 <dt>本地派生根</dt><dd><code id="accountKeyDerived"></code></dd><dt>链上账户根</dt><dd><code id="accountKeyOnchain"></code></dd>
 <dt>账户密钥代数</dt><dd id="accountKeyEpoch"></dd><dt>链上下一个叶号</dt><dd id="accountKeyNext"></dd><dt>核验区块</dt><dd id="accountKeyBlock"></dd><dt>核验时间</dt><dd id="accountKeyTime"></dd></dl>
+<div id="backupChainResult" hidden><dl><dt>测试账户余额</dt><dd id="backupBalance"></dd><dt>备份中本代密钥树的预留数</dt><dd id="backupRowCount"></dd><dt>上一枚链上叶号</dt><dd id="backupLastLeaf"></dd></dl></div>
 <p id="accountKeyRecovery" class="account-key-note" hidden>这是恢复的只读备份。即使根匹配，也不能证明备份是最新的，更不能恢复签名权限。</p>
-<p class="account-key-note">结果只对应所示区块和当前解锁会话，不是可对外验证的所有权证明。单个 RPC 仍可能提供错误信息。</p></div>
+<p class="account-key-note" id="accountKeySourceNote"></p></div>
 <output id="accountKeyStatus" class="account-key-status" aria-live="polite">解锁密钥库后，输入对应的测试账户开始核验。</output>
 </section>
 

@@ -8,6 +8,7 @@ import {localSimulationEndpoint,reservedRow,simulateLocalProof} from './local-tr
 import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
 import {encodeNetworkAction,setup,spendingLeaf,validateIntent,validateNetworkPlan} from './vault-network-proof.js';
 import {verifyNetworkPlanState} from './signing-preflight.js';
+import {compareBackupJournal, readRecoveryAccount, recoveryJournalReview} from './backup-recovery.js';
 
 export class TestVault {
   #key;#walletId;#revision=0;#generation=0;#timer;#deadline=0;#details=null;#observed=new Map();
@@ -15,17 +16,20 @@ export class TestVault {
   #bindingWorker;#bindingAbort;#bindingGeneration=0;#bindingResult;#reviewTicket;
   #reserved;#simulationAbort;
   #networkWorker;
+  #recoveredAccounts=[];
   constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
-    bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,networkPreflight=verifyNetworkPlanState,
+    bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,recoveryReader=readRecoveryAccount,networkPreflight=verifyNetworkPlanState,
     transferWorkerFactory=()=>new ProofWorkerClient(new URL('./local-transfer-worker.js',import.meta.url)),
     networkWorkerFactory=()=>new ProofWorkerClient(new URL('./vault-network-worker.js',import.meta.url))}={}){
     if(!locks?.request||!Number.isFinite(idleMs)||idleMs<=0)fail('UNSUPPORTED');
     this.store=store;this.locks=locks;this.now=now;this.idleMs=idleMs;this.onLock=onLock;this.workerFactory=workerFactory;
     this.bindingWorkerFactory=bindingWorkerFactory;this.accountReader=accountReader;this.transferWorkerFactory=transferWorkerFactory;
     this.networkWorkerFactory=networkWorkerFactory;this.networkPreflight=networkPreflight;
+    this.recoveryReader=recoveryReader;
   }
   get unlocked(){if(this.#key&&this.now()>=this.#deadline)this.lock('idle');return !!this.#key;}
   get details(){return this.#details?{...this.#details,unlocked:this.unlocked}:null;}
+  get recoveredAccounts(){return this.unlocked ? [...this.#recoveredAccounts] : [];}
   touch(){
     if(!this.#key)return;
     if(this.now()>=this.#deadline){this.lock('idle');return;}
@@ -33,6 +37,7 @@ export class TestVault {
   }
   #arm(){clearTimeout(this.#timer);this.#deadline=this.now()+this.idleMs;this.#timer=setTimeout(()=>this.lock('idle'),this.idleMs);this.#timer.unref?.();}
   lock(reason='manual'){
+    this.#recoveredAccounts=[];
     this.#networkWorker?.dispose();this.#networkWorker=undefined;
     const hadKey=!!this.#key;this.#generation++;this.#key=undefined;this.#walletId=undefined;
     this.cancelProof();
@@ -42,6 +47,8 @@ export class TestVault {
   #capture(){if(!this.unlocked)fail('LOCKED');return {key:this.#key,generation:this.#generation,id:this.#walletId};}
   #check(context){if(!this.unlocked||context.generation!==this.#generation||context.id!==this.#walletId)fail('LOCKED');}
   #setDetails(record,payload){
+    this.#recoveredAccounts=record.mode==='recovery-readonly' && record.chainId===97 && payload ?
+      [...new Set(payload.journal.map(row=>row.account).filter(account=>account!==PROOF_ACCOUNT))] : [];
     this.#details={walletId:record.walletId,chainId:record.chainId,createdAt:record.createdAt,mode:record.mode,
       revision:record.revision,reservations:payload?.journal.length??null};
   }
@@ -101,6 +108,26 @@ export class TestVault {
         const {record}=await this.#load(context);this.#check(context);
         return JSON.stringify(record,null,2)+'\n';
       }catch(error){this.lock('storage');throw error;}
+    });
+  }
+  async checkBackupFile(text){
+    const context=this.#capture(), backup=parseBackup(text);
+    return this.#exclusive(async()=>{
+      let current;
+      try{current=await this.#load(context);}catch(error){
+        if(this.#generation===context.generation)this.lock('storage');
+        throw error;
+      }
+      const {record,payload}=current;
+      if(record.mode!=='active')fail('RECOVERY');
+      if(record.walletId!==backup.walletId || record.chainId!==backup.chainId ||
+        record.kdf.salt!==backup.kdf.salt || record.createdAt!==backup.createdAt)fail('BACKUP_SOURCE');
+      let saved;
+      try{saved=await decryptPayload(backup,context.key);}catch{fail('BACKUP_INVALID');}
+      this.#check(context);
+      if(saved.seed!==payload.seed)fail('BACKUP_SOURCE');
+      return {status:compareBackupJournal(saved.journal,payload.journal),savedCount:saved.journal.length,
+        currentCount:payload.journal.length,checkedRevision:record.revision};
     });
   }
   async restoreBackup(text,password){
@@ -380,7 +407,7 @@ export class TestVault {
     this.#bindingGeneration++;this.#bindingAbort?.abort();this.#bindingAbort=undefined;
     this.#bindingWorker?.dispose();this.#bindingWorker=undefined;this.#bindingResult=undefined;
   }
-  async checkAccountKeys({endpoint,account},progress){
+  async checkAccountKeys({endpoint,account,fromBackup=false},progress){
     const context=this.#capture();
     if(this.#bindingAbort)fail('BUSY');
     this.#reserved=undefined;
@@ -394,19 +421,33 @@ export class TestVault {
     let worker;
     try{
       const {record}=await this.#load(context);stillCurrent();
-      const read=async()=>validateKeySnapshot(await this.accountReader({endpoint,account,chainId:record.chainId,signal:controller.signal}),record.chainId,account);
+      if(fromBackup && (record.mode!=='recovery-readonly'||record.chainId!==97))fail('KEY_CONTEXT');
+      const read=async()=>{
+        const reader=fromBackup ? this.recoveryReader : this.accountReader;
+        const raw=await reader({endpoint,account,chainId:record.chainId,signal:controller.signal});
+        const snapshot=validateKeySnapshot(raw,record.chainId,account);
+        if(fromBackup){
+          if(typeof raw.balanceWei!=='string'||!/^(0|[1-9][0-9]{0,77})$/.test(raw.balanceWei))fail('KEY_CONTEXT');
+          snapshot.balanceWei=raw.balanceWei;
+        }
+        return snapshot;
+      };
       const before=await read();stillCurrent();
       worker=this.bindingWorkerFactory();this.#bindingWorker=worker;
       const derived=validateDerivedRoot(await worker.request('check',{record,key:context.key,snapshot:before},progress),record,before);
       stillCurrent();
       const after=await read();stillCurrent();
       if(!keyStateEqual(before,after))fail('ACCOUNT_CHANGED');
+      if(fromBackup && (BigInt(after.blockNumber)<BigInt(before.blockNumber) ||
+        (after.blockNumber===before.blockNumber && (after.blockHash!==before.blockHash ||
+          after.balanceWei!==before.balanceWei))))fail('ACCOUNT_CHANGED');
       const latest=await this.#load(context);stillCurrent();
       if(latest.record.chainId!==record.chainId||latest.record.mode!==record.mode)fail('KEY_CONTEXT');
       this.#bindingResult={format:'aurven-account-root-check-v1',walletId:record.walletId,chainId:record.chainId,
         account,mode:record.mode,matched:derived.pubSeed===after.pubSeed&&derived.root===after.root,
         purpose:'local-root-comparison-only',derivedPubSeed:derived.pubSeed,derivedRoot:derived.root,
         snapshot:after,checkedAt:Date.now()};
+      if(fromBackup)this.#bindingResult.backupReview=recoveryJournalReview(latest.payload.journal,after);
       return this.accountCheck;
     }catch(error){
       if(generation!==this.#bindingGeneration)fail(this.unlocked?'CANCELED':'LOCKED');

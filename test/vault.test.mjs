@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createEnvelope,decryptPayload,deriveVaultKey,encryptPayload,parseBackup,validateEnvelope,VaultError,MAX_BACKUP_BYTES} from '../ui/vault-crypto.js';
 import {TestVault} from '../ui/vault-service.js';
+import {compareBackupJournal} from '../ui/backup-recovery.js';
+import {accountCodeHash} from '../ui/contract-pin.js';
 import {TestSigningSession,hex} from '../ui/test-wallet-core.js';
 import {EvmTreeKey,leafPk,rootFromProof} from '../ui/lib/evmwots.js';
 
@@ -34,6 +36,80 @@ const row={chainId:31337,account:'0x'+'11'.repeat(20),epoch:1,pubSeed:'22'.repea
 async function session(store=new MemoryStore(),locks=new Locks(),options={}){
   const vault=new TestVault(store,{locks,...options});await vault.unlock(passphrase);return {vault,store,locks};
 }
+
+test('a saved backup is authenticated and compared without updating or replacing the active vault',async()=>{
+  const {vault,store}=await session();
+  const early=await vault.exportBackup();
+  await vault.reserveLeaf(row);
+  const current=await vault.exportBackup(),original=copy(store.record);
+  assert.deepEqual(await vault.checkBackupFile(early),{status:'older',savedCount:0,currentCount:1,checkedRevision:original.revision});
+  assert.equal((await vault.checkBackupFile(current)).status,'matches');
+  const damaged=JSON.parse(current);damaged.revision++;
+  await assert.rejects(vault.checkBackupFile(JSON.stringify(damaged)),code('BACKUP_INVALID'));
+  damaged.walletId='77'.repeat(16);
+  await assert.rejects(vault.checkBackupFile(JSON.stringify(damaged)),code('BACKUP_SOURCE'));
+  const plain=await decryptPayload(original,base.key);
+  plain.journal[0].digest='12'.repeat(16);
+  const branch=await encryptPayload(plain,base.key,original);
+  assert.equal((await vault.checkBackupFile(JSON.stringify(branch))).status,'different');
+  plain.seed='aa'.repeat(32);
+  const foreignSeed=await encryptPayload(plain,base.key,original);
+  await assert.rejects(vault.checkBackupFile(JSON.stringify(foreignSeed)),code('BACKUP_SOURCE'));
+  assert.equal(vault.unlocked,true);assert.deepEqual(store.record,original);
+  vault.lock();await assert.rejects(vault.checkBackupFile(current),code('LOCKED'));
+});
+
+test('backup comparison checks entry order, context, digest and single-use simulation attempts',()=>{
+  const used={...row,simulationAttempt:true},next={...row,leaf:1};
+  assert.equal(compareBackupJournal([row],[used]),'older');
+  assert.equal(compareBackupJournal([used],[row]),'different');
+  assert.equal(compareBackupJournal([row,next],[next,row]),'different');
+  assert.equal(compareBackupJournal([row,next],[row]),'different');
+  for(const field of ['account','epoch','chainId','pubSeed','root','leaf','digest'])
+    assert.equal(compareBackupJournal([row],[{...row,[field]:null}]),'different');
+  assert.equal(compareBackupJournal([used,next],[used,next]),'matches');
+});
+
+test('restored testnet profiles list only journal candidates and can check the last consumed leaf without writing',async()=>{
+  const fixture=await createEnvelope(passphrase,97);
+  const entry={...row,chainId:97},other='0x'+'66'.repeat(20);
+  const plain=await decryptPayload(fixture.record,fixture.key);
+  plain.journal=[entry,{...entry,leaf:1},{...entry,account:other,leaf:2},
+    {...entry,account:'0x'+'00'.repeat(20),leaf:3}];
+  const saved=await encryptPayload(plain,fixture.key,fixture.record);
+  const state={account:entry.account,chainId:97,epoch:1,next:2,pubSeed:'0x'+entry.pubSeed,root:'0x'+entry.root,
+    balanceWei:'123',timestamp:Math.floor(Date.now()/1000),blockNumber:'0xf',blockHash:'0x'+'ac'.repeat(32),codeHash:accountCodeHash};
+  let reads=0,change={},mismatch=false;
+  const options={locks:new Locks(),accountReader:()=>assert.fail('unexpected single-node query'),
+    recoveryReader:async()=>++reads%2?{...state}:{...state,...change},bindingWorkerFactory:()=>({
+      dispose(){},async request(type,{record,snapshot}){
+        assert.equal(type,'check');assert.equal(record.mode,'recovery-readonly');
+        return {walletId:record.walletId,chainId:97,account:entry.account,epoch:snapshot.epoch,
+          pubSeed:snapshot.pubSeed,root:mismatch?'0x'+'ef'.repeat(16):snapshot.root};
+      }
+    })};
+  const store=new MemoryStore(null),vault=new TestVault(store,options);
+  const request={account:entry.account,fromBackup:true};
+  await vault.restoreBackup(JSON.stringify(saved),passphrase);
+  assert.deepEqual(vault.recoveredAccounts,[entry.account,other]);assert.equal(reads,0);
+  vault.recoveredAccounts.pop();assert.equal(vault.recoveredAccounts.length,2);
+  const original=copy(store.record);
+  const report=await vault.checkAccountKeys(request);
+  assert.equal(report.matched,true);assert.equal(report.snapshot.balanceWei,'123');
+  assert.deepEqual(report.backupReview,{currentTreeReservations:2,lastChainLeafRecorded:true});
+  state.next=3;assert.equal((await vault.checkAccountKeys(request)).backupReview.lastChainLeafRecorded,false);
+  state.next=0;assert.equal((await vault.checkAccountKeys(request)).backupReview.lastChainLeafRecorded,null);
+  mismatch=true;assert.equal((await vault.checkAccountKeys(request)).matched,false);
+  for(change of [{next:7},{blockNumber:'0x1'},{blockHash:'0x'+'ab'.repeat(32)},{balanceWei:'0'}]){
+    await assert.rejects(vault.checkAccountKeys(request),code('ACCOUNT_CHANGED'));
+    assert.equal(vault.accountCheck,null);
+  }
+  await assert.rejects(vault.reserveLeaf(entry),code('RECOVERY'));
+  await assert.rejects(vault.checkBackupFile(JSON.stringify(saved)),code('RECOVERY'));
+  assert.deepEqual(store.record,original);vault.lock();assert.deepEqual(vault.recoveredAccounts,[]);
+  const active=await session(new MemoryStore(saved),options.locks,options);
+  await assert.rejects(active.vault.checkAccountKeys(request),code('KEY_CONTEXT'));active.vault.lock();
+});
 
 test('vault encryption round-trips without storing plaintext and uses non-extractable keys',async()=>{
   const plain=await decryptPayload(base.record,base.key);

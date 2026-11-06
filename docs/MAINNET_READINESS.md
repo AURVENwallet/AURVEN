@@ -55,6 +55,14 @@ The vault repeats these checks before preparing the proof, before committing the
 
 On 2026-11-06 a mobile-width Edge drill used two endpoint routes backed by a disposable local chain. One simulated endpoint went offline before reservation, and then in a separate attempt after reservation. The payer received neither request. After recovery the next approved transfer used leaf 1 and delivered exactly one wei. Both public endpoints also completed read-only creation and rotation previews. The public sample account reported epoch 2 and next leaf 1. This release sent no new public transaction.
 
+### Read-only backup recovery drill
+
+Two isolated Edge profiles exercised device loss on a disposable local chain configured as chain 97. The first profile created a three-wei account and saved a backup. The second imported it and found the candidate address before making an account lookup. The first profile then spent one wei. Comparing its earlier file reported an older journal. Comparing a fresh export reported matching records.
+
+Two endpoint routes served the same local chain. The restored profile rebuilt the matching active root, read two wei and identified leaf 0 as missing from the backup. Disconnecting one endpoint cleared the result. Reloading and unlocking kept the imported profile read-only. Device handover and independent authorization after losing the original signer still require a protocol and review.
+
+A separate read-only run queried the public BSC testnet sample account at block 141095378 from a newly restored, unrelated vault. Both endpoints returned epoch 2, next leaf 1 and zero wei. The local root comparison correctly reported a mismatch.
+
 ## Disposable browser transfer
 
 Open [Test Wallet](https://aurven.site/wallet.html#testnetTrial) in a browser with an injected payer wallet on BSC testnet and enough faucet tBNB for gas. Connect, enter a regular recipient address and preview both addresses and the maximum fee. The payer wallet asks for one contract creation with a value of one wei. The constructor checks chain 97, creates a pinned smart account, activates a fresh tree, funds it and executes the one-wei transfer in the same transaction. A failure reverts all these steps. The browser generates the one-time keys in a disposable worker, commits each signing leaf to IndexedDB before signing and discards the keys afterwards.
