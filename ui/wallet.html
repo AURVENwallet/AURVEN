@@ -64,13 +64,18 @@ node scripts/local-wallet.mjs</code></pre>
 <div class="trial-form"><label>操作<select id="netKind"><option value="create">建户并存入 3 wei</option><option value="send">转出 1 wei</option><option value="rotate">轮换签名密钥</option><option value="handover">交给新设备</option><option value="fund">再存入 3 wei</option></select></label>
 <label id="netAccountField" hidden>智能账户<select id="netAccount"></select></label>
 <label id="netToField" hidden>收款地址<input id="netTo" placeholder="0x…" maxlength="42" autocomplete="off"></label>
-<div id="netHandoverFields" hidden><label>新设备的公开请求<input id="netOffer" type="file" accept=".json,application/json"></label><label>独立核对的指纹<input id="netFingerprint" maxlength="32" autocomplete="off" spellcheck="false"></label><p>授权会停用本机这棵旧密钥树。提交中断后请找回原回执。</p></div>
+<div id="netHandoverFields" hidden><label>新设备的公开请求<input id="netOffer" type="file" accept=".json,application/json"></label><label>独立核对的指纹<input id="netFingerprint" maxlength="32" autocomplete="off" spellcheck="false"></label><p>授权会停用本机这棵旧密钥树。付款中断后，可在操作记录中查回执或继续原付款。</p></div>
 <button id="netPreview" type="button">预览操作</button></div>
 <div id="netReview" hidden><dl class="trial-values"><dt>操作</dt><dd id="netAction"></dd><dt>智能账户</dt><dd id="netAddress"></dd><dt>付款钱包</dt><dd id="netPayer"></dd><dt>双节点核对区块</dt><dd id="netCheckedBlock"></dd><dt id="netKeyStateLabel" hidden>链上密钥状态</dt><dd id="netKeyState" hidden></dd><dt>资金去向</dt><dd id="netDestination"></dd><dt>请求的手续费上限</dt><dd id="netFee"></dd></dl><button id="netConfirm" type="button" class="run">确认并打开付款钱包</button></div>
 <output id="netStatus" class="demo-status" aria-live="polite">仅供测试网研究。备份恢复后仅可查看。</output>
 <div id="netHistory" hidden><div class="trial-form"><label>操作记录<select id="netRecords"></select></label><button id="netCheck" type="button">双节点核对回执</button><button id="netOld" type="button" hidden>只读验证旧授权</button></div>
 <label id="netManual" hidden>付款钱包里的交易哈希（可选）<input id="netHash" placeholder="0x…" maxlength="66"></label>
 <button id="netRotationExport" type="button" hidden>导出公开换根记录</button>
+<div id="netRetry" hidden><p>付款中断时，解锁原密钥库并连接原付款钱包，可核对已保存的交接授权。</p>
+<button id="netRetryPreview" type="button">检查原付款能否继续</button>
+<div id="netRetryReview" hidden><dl class="trial-values"><dt>智能账户</dt><dd id="retryAccount"></dd><dt>付款钱包与序号</dt><dd id="retryPayer"></dd>
+<dt>接收根与指纹</dt><dd id="retryRoot"></dd><dt>授权截止时间</dt><dd id="retryDeadline"></dd><dt>请求的手续费上限</dt><dd id="retryFee"></dd></dl>
+<button id="netRetryConfirm" type="button" class="run">使用原授权打开付款钱包</button></div></div>
 <p id="netOutcome" aria-live="polite"></p><a id="netExplorer" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>在 BscScan 查看交易 ↗</a> <a id="netReplacement" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>查看占用该序号的交易 ↗</a> <a id="netOriginal" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>查看原始付款哈希 ↗</a></div>
 <div class="public-receipt" id="testnetHandover"><h3>在新设备接收测试账户</h3>
 <p>在新设备创建并解锁独立的链 97 密钥库。输入旧设备的智能账户地址，下载请求，并通过另一渠道向旧设备提供指纹。</p>

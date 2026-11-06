@@ -11,6 +11,7 @@ import {verifyNetworkPlanState} from './signing-preflight.js';
 import {compareBackupJournal, readRecoveryAccount, recoveryJournalReview} from './backup-recovery.js';
 import {checkSource,confirmLocalHandover,offerFingerprint,readHandoverState,rotationMessage,sendLocalRotation} from './local-handover.js';
 import {recoverTestnetRotation,validateRotationRecord} from './testnet-rotation.js';
+import {openHandoverPayment,sealHandoverPayment} from './handover-payment.js';
 import {EXEC_LIMIT} from './lib/evmwots.js';
 
 export class TestVault {
@@ -347,10 +348,21 @@ export class TestVault {
       return result;
     });
   }
-  async authorizeNetworkAction(input,progress) {
+  async readHandoverPayment(input){
+    const context=this.#capture(),row=structuredClone(input);
+    return this.#exclusive(async()=>{
+      const {record,payload}=await this.#load(context);
+      if(record.mode!=='active' || record.chainId!==97 || row.walletId!==context.id)fail('RECOVERY');
+      const data=await openHandoverPayment(context.key,row,payload.journal);
+      this.#check(context);
+      return data;
+    });
+  }
+  async authorizeNetworkAction(input,progress,savePayment) {
     const context=this.#capture(),plan=structuredClone(input);
     validateNetworkPlan(plan);
     if (context.id!==plan.walletId) fail('NET_KEYS');
+    if(plan.offer && typeof savePayment!=='function')fail('RETRY_MISSING');
     const fresh=async()=>{
       this.#check(context);validateNetworkPlan(plan);
       await this.networkPreflight(plan);
@@ -394,8 +406,14 @@ export class TestVault {
             if (!response.ok) fail('NET_PROOF');
             init=await response.json();
           }
+          const data=encodeNetworkAction(plan,intent,proof,init);
+          if(plan.offer){
+            const saved=await sealHandoverPayment(context.key,plan,data);
+            this.#check(context);
+            await savePayment({...saved,intent});
+          }
           await fresh();await checkInbound();
-          return {data:encodeNetworkAction(plan,intent,proof,init),intent};
+          return {data,intent};
         } finally {proof.fill(0);}
       } catch (error) {
         if (reserved) error.leafReserved=true;

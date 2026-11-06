@@ -4,8 +4,8 @@ import {readFileSync} from 'node:fs';
 import {verifyNetworkPlanState} from '../ui/signing-preflight.js';
 import {readRecoveryAccount} from '../ui/backup-recovery.js';
 import {secondaryTestnet} from '../ui/testnet-heads.js';
-import {submitNetwork} from '../ui/network-account.js';
-import {createdAddress} from '../ui/browser-trial.js';
+import {submitNetwork,reviewHandoverPayment,resumeHandoverPayment} from '../ui/network-account.js';
+import {createdAddress,hashBytes} from '../ui/browser-trial.js';
 import {keccak256} from '../ui/lib/keccak.js';
 
 const primary='https://first.test',secondary='https://second.test';
@@ -108,4 +108,38 @@ test('a conflict before authorization or after proof release cannot open the pay
   assert.equal(authorizations,0);assert.equal(saved,null);
   control.mode='normal';await assert.rejects(submit(),/NET_PREFLIGHT_FORK/);
   assert.equal(authorizations,1);assert.equal(saved.rows[0].status,'stopped');assert.equal(saved.rows[0].leafReserved,true);
+});
+
+test('manual handover payment rechecks both nodes, the connected payer and the reviewed fee before each prompt',async t=>{
+  const {control}=environment(t);
+  const base={...plan,kind:'rotate',recipient:plan.payer,offer:{newRoot:word(5)},fingerprint:'c'.repeat(32),
+    status:'declined',escrow:{iv:'iv',cipher:'encrypted'},dataHash:hashBytes('0xabcd')};
+  Object.assign(base,await read(base));let current={rows:[base]},calls=0,promptTx,connectedPayer=base.payer;
+  const store={read:async()=>structuredClone(current),compareAndSwap:async(prev,updated)=>{assert.deepEqual(prev,current);current=updated;}};
+  const provider={request:async({method,params})=>{
+    if(method==='eth_chainId')return '0x61';
+    if(method==='eth_accounts')return [connectedPayer];
+    assert.equal(method,'eth_sendTransaction');calls++;promptTx=params[0];return word(7);
+  }};
+  const opts={id:base.id,store,provider,endpoint:primary,secondary,walletId:()=>base.walletId,readPayment:async()=>'0xabcd',
+    locks:{request:async(_name,_,fn)=>fn({})}};
+  const review=await reviewHandoverPayment(opts);
+  assert.ok(!('data' in review));assert.equal(calls,0);
+  for(const mode of ['pending','down','wrongChain','fork','root','code']){
+    control.mode=mode;
+    await assert.rejects(resumeHandoverPayment(opts,review));
+    assert.equal(calls,0);
+  }
+  control.mode='normal';connectedPayer=addr('5');
+  await assert.rejects(resumeHandoverPayment(opts,review),/TRIAL_PAYER/);connectedPayer=base.payer;
+  await assert.rejects(resumeHandoverPayment(opts,{...review,gasPrice:'0x3'}),/RETRY_CHECK/);
+  await assert.rejects(resumeHandoverPayment({...opts,locks:{request:async(_n,_o,fn)=>fn(null)}},review),/TRIAL_IN_USE/);
+  for(const status of ['included','expired','replaced','reverted','reorg']){
+    current={rows:[{...base,status}]};await assert.rejects(resumeHandoverPayment(opts,review),/RETRY_CHECK/);
+  }
+  assert.equal(calls,0);current={rows:[base]};
+  const result=await resumeHandoverPayment(opts,review);
+  assert.deepEqual(promptTx,{from:base.payer,to:base.account,chainId:'0x61',nonce:base.nonce,value:'0x0',
+    gas:base.gas,gasPrice:base.gasPrice,data:'0xabcd'});
+  assert.equal(calls,1);assert.equal(result.status,'waiting');assert.equal(result.hash,word(7));
 });

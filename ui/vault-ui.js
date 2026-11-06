@@ -173,9 +173,13 @@ export async function receiveTestnetHandover(account,record,hash){
   try{return record?await vault.acceptTestnetHandover(record,hash):await vault.prepareTestnetHandover(account);}
   finally{details=await vault.inspect();render();}
 }
-export async function authorizeNetwork(plan,progress) {
+export async function readHandoverPayment(row){
   networkWalletId();
-  try {return await vault.authorizeNetworkAction(plan,progress);}
+  return vault.readHandoverPayment(row);
+}
+export async function authorizeNetwork(plan,progress,savePayment) {
+  networkWalletId();
+  try {return await vault.authorizeNetworkAction(plan,progress,savePayment);}
   finally {details=await vault.inspect();render();}
 }
 el('accountKeyForm').addEventListener('input',event=>{

@@ -1,9 +1,9 @@
 import {secondaryTestnet as secondary} from './testnet-heads.js';
 import {handoverFingerprint} from './vault-network-proof.js';
-import {networkWalletId,authorizeNetwork,receivedTestnetAccount,receiveTestnetHandover} from './vault-ui.js';
+import {networkWalletId,authorizeNetwork,readHandoverPayment,receivedTestnetAccount,receiveTestnetHandover} from './vault-ui.js';
 import {openVaultStore} from './vault-store.js';
 import {trialEndpoint,payerAccount,inTbnb} from './browser-trial.js';
-import {previewNetwork,submitNetwork,reconcileNetwork,needsReceiptCheck,checkOldApproval} from './network-account.js';
+import {canResumeHandover,reviewHandoverPayment,resumeHandoverPayment,previewNetwork,submitNetwork,reconcileNetwork,needsReceiptCheck,checkOldApproval} from './network-account.js';
 import {compareNetworkReceipts} from './network-receipt.js';
 import {readAccount} from './account-state.js';
 import {exportRotationRecord} from './testnet-rotation.js';
@@ -23,7 +23,9 @@ const kinds={create:'建户并存入 3 wei',send:'转出 1 wei',rotate:'轮换�
 const states={pending:'付款钱包已提交，当前节点仍在等待打包。',unseen:'当前节点未找到这笔交易。请稍后再核对，或从付款钱包复制交易哈希。',
   replaced:'相同付款序号已被另一笔不同内容的交易使用。',reorg:'原回执所在区块已被替换，当前链上尚未核实这笔操作。',
   expired:'截至核对区块未发现已打包的付款，签名授权已过期。',preparing:'准备中',requested:'等待核对付款结果',waiting:'等待链上回执。',included:'交易回执已核对',declined:'付款请求已取消。',stopped:'准备已停止，尚未请求付款。',reverted:'交易已打包，但执行失败。'};
-const errors={HANDOVER_OFFER:'交接请求与账户、密钥或授权有效期不符。',HANDOVER_FINGERPRINT:'指纹不一致，请通过另一渠道向新设备核对。',
+const errors={RETRY_LOCK:'此浏览器无法锁定付款请求，请使用支持 Web Locks 的浏览器。',RETRY_CHECK:'未能确认原付款可继续，请先核对回执和付款序号。',
+  RETRY_INVALID:'保存的授权与原付款记录不符，已停止。',RETRY_MISSING:'本机没有这笔交接的已保存授权。',
+  HANDOVER_OFFER:'交接请求与账户、密钥或授权有效期不符。',HANDOVER_FINGERPRINT:'指纹不一致，请通过另一渠道向新设备核对。',
   HANDOVER_FRESH:'请使用全新、独立的链 97 密钥库接收该账户。',HANDOVER_RETIRED:'旧密钥已预留换根授权，请核对原回执。',
   HANDOVER_PENDING:'尚未核实本机接收密钥已最终生效，请核对回执后重试。',HANDOVER_RECEIPT:'换根记录与已保存的交接不同。',
   HANDOVER_SEARCH:'请先在下方找回换根交易，再填入查到的哈希。',HANDOVER_FILE:'请选择对应的公开交接文件。',ROTATION_FILE:'请选择有效的测试网公开换根记录。',
@@ -41,10 +43,10 @@ const errors={HANDOVER_OFFER:'交接请求与账户、密钥或授权有效期�
   NET_EXHAUSTED:'当前密钥的可用叶号已耗尽。',TRIAL_HASH:'该哈希与本次试转不符。',TRIAL_FULL:'本浏览器已达到 32 条试转记录上限。',
   TRIAL_PROVIDER:'请在支持浏览器钱包的网站环境中打开此页。',TRIAL_PAYER:'付款账户已改变，请重新连接。',TRIAL_CHAIN:'请先在付款钱包中切换到 BSC 测试网（97）。',
   TRIAL_NONCE:'付款钱包有其他交易，请等待确认并重新预览。',TRIAL_BALANCE:'付款钱包的测试币不足以覆盖本金和手续费上限。',TRIAL_RECIPIENT:'试转需要普通付款钱包和有效的普通收款地址。'};
-let store,payer,plan,records=[],busy=false,receiveFeedback=false;
+let store,payer,plan,retryReview,records=[],busy=false,receiveFeedback=false;
 const storage=async()=>store??=await openVaultStore('aurven-vault-network-actions-v1');
 const selected=()=>records.find(r=>r.id===el('netRecords').value);
-function reset(){plan=undefined;el('netReview').hidden=true;}
+function reset(){plan=undefined;retryReview=undefined;el('netReview').hidden=true;el('netRetryReview').hidden=true;}
 function checkMessage(check) {
   const block=check.block?' #'+BigInt(check.block):'';
   if (check.kind==='agreed') return '两个节点核对一致'+block;
@@ -68,9 +70,18 @@ function render(){
   el('netHistory').hidden=!row;if (!row) return;
   el('netRotationExport').hidden=row.kind!=='rotate'||!row.intent||!row.dataHash;
   el('netRotationExport').disabled=busy;
+  el('netRetry').hidden=!canResumeHandover(row);
+  el('netRetryPreview').disabled=busy||!payer;
+  el('netRetryConfirm').disabled=busy||!retryReview||retryReview.id!==row.id;
   el('netCheck').disabled=busy||!row.dataHash;el('netManual').hidden=!row.dataHash||(!needsReceiptCheck(row)&&['included','reverted','replaced'].includes(row.status));
   el('netOld').hidden=row.kind!=='send'||row.status!=='included'||needsReceiptCheck(row);el('netOld').disabled=busy;
   const details=[states[row.status]??''];
+  if(row.offer && !row.escrow && (row.dataHash||row.leafReserved) && !['included','reverted','replaced'].includes(row.status)){
+    details.push('此记录没有可恢复的签名副本，请核对原回执。');
+  }
+  if(row.escrow && row.deadline<=Date.now()/1000 && el('netRetry').hidden===false){
+    el('netRetry').hidden=true;details.push('此交接授权已到期，只能核对原付款结果。');
+  }
   if (row.checkedBlock) details.unshift('上次核对区块 #'+BigInt(row.checkedBlock));
   if (!row.checkedBlock && ['included','reverted'].includes(row.status)) details.unshift('上次保存的回执');
   if (row.receiptCheck) {
@@ -153,8 +164,8 @@ el('netConfirm').onclick=()=>action(async()=>{
   const approved=plan;if(!approved)return;plan=undefined;el('netHash').value='';
   try{
     const row=await submitNetwork({endpoint,store:await storage(),provider:window.ethereum,plan:approved,walletId:networkWalletId,
-      authorize:async p=>{
-        const result=await authorizeNetwork(p,n=>status('浏览器正在生成一次性签名… '+Math.round(n*100)+'%'));
+      authorize:async (p,savePayment)=>{
+        const result=await authorizeNetwork(p,n=>status('浏览器正在生成一次性签名… '+Math.round(n*100)+'%'),savePayment);
         status('正在复核账户状态，再打开付款钱包…');return result;
       }});
     await check(row);
@@ -176,7 +187,26 @@ el('netCheck').onclick=()=>action(()=>check(selected(),el('netHash').value.trim(
 el('netOld').onclick=()=>action(async()=>{
   const result=await checkOldApproval(endpoint,selected());status('旧授权已被合约拒绝 · '+result.reason+' · #'+BigInt(result.block)+' · 主节点只读模拟');
 });
-el('netRecords').onchange=()=>{el('netHash').value='';render();};
+el('netRecords').onchange=()=>{reset();el('netHash').value='';render();};
+async function retryOptions(id){
+  return {id,store:await storage(),provider:window.ethereum,walletId:networkWalletId,readPayment:readHandoverPayment,endpoint,secondary};
+}
+el('netRetryPreview').onclick=()=>action(async()=>{
+  reset();
+  const r=await reviewHandoverPayment(await retryOptions(selected().id));
+  retryReview=r;
+  el('retryAccount').textContent=r.account;el('retryPayer').textContent=r.payer+' · nonce '+BigInt(r.nonce);
+  el('retryRoot').textContent=r.newRoot+' · '+r.fingerprint;el('retryDeadline').textContent=new Date(r.deadline*1000).toISOString();
+  el('retryFee').textContent=inTbnb(BigInt(r.gas)*BigInt(r.gasPrice));el('netRetryReview').hidden=false;
+  status('原授权和付款序号已核对，请确认是否再次打开付款钱包。');
+});
+el('netRetryConfirm').onclick=()=>action(async()=>{
+  const approved=retryReview;if(!approved)return;reset();
+  try{
+    const row=await resumeHandoverPayment(await retryOptions(selected().id),approved);
+    await check(row);
+  }finally{await refresh(approved.id);}
+});
 el('netRotationExport').onclick=()=>{
   try{
     const record=exportRotationRecord(selected());
