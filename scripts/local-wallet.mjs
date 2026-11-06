@@ -48,7 +48,7 @@ export async function startLocalWallet() {
       if (pathname==='/local/setup.js') {
         res.writeHead(200,{'Content-Type':types['.js']}).end(await readFile(new URL('./local-wallet-setup.js',import.meta.url)));return;
       }
-      if (!asset.test(pathname)) {res.writeHead(404).end();return;}
+      if (!asset.test(pathname) && pathname!=='/assets/testnet-rotation-record.json') {res.writeHead(404).end();return;}
       const requested=path.join(ui,pathname.slice(1));
       const file=await realpath(requested);
       if (file!==requested || !file.startsWith(ui+path.sep)) {res.writeHead(404).end();return;}
@@ -57,7 +57,7 @@ export async function startLocalWallet() {
         content=content.toString('utf8').replace('</head>',
           '<meta name="aurven-local-session" content="'+session+'"><script type="module" src="/local/setup.js"></script></head>');
       }
-      res.writeHead(200,{'Content-Type':types[path.extname(file)]}).end(content);
+      res.writeHead(200,{'Content-Type':types[path.extname(file)]??'application/json'}).end(content);
     } catch {if (!res.headersSent) res.writeHead(404);res.end();}
   });
   server.requestTimeout=15000;

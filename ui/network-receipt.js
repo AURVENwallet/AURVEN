@@ -36,7 +36,7 @@ function matchesAction(tx,row) {
   const destination=row.kind==='create'?tx.to===null:same(tx.to,row.account);
   return destination && BigInt(tx.value)===BigInt(row.value) && tx.input.length<=96002 && digestData(tx.input)===row.dataHash;
 }
-function verifyEvents(receipt,row) {
+export function verifyNetworkEvents(receipt,row) {
   if (row.kind==='send') {
     const events=executionEvents(receipt,row.account);
     valid(events.length===1 && events[0].epoch===row.snapshot.epoch && events[0].leaf===row.intent.leaf &&
@@ -119,7 +119,7 @@ async function observe(rpc,head,row,manualHash) {
       if (ok) {
         if (row.kind==='create') valid(same(receipt.contractAddress,row.wrapper));
         valid(Array.isArray(receipt.logs) && receipt.logs.length<=4096);
-        verifyEvents(receipt,row);
+        verifyNetworkEvents(receipt,row);
         valid(hashBytes(await rpc('eth_getCode',[row.account,head.number]))===accountCodeHash);
       }
       if (!ok) valid(Array.isArray(receipt.logs) && receipt.logs.length===0);

@@ -58,6 +58,9 @@ test('local setup rejects foreign requests, malformed roots and private files; s
     assert.equal((await fetch(origin+file)).status,404,file);
   for (const file of ['/wallet.html','/vault-ui.js','/assets/aurven-mark-web.png','/local/setup.js','/vendor/three/addons/controls/OrbitControls.js'])
     assert.equal((await fetch(origin+file)).status,200,file);
+  const example=await fetch(origin+'/assets/testnet-rotation-record.json');
+  assert.equal(example.headers.get('content-type'),'application/json');
+  assert.equal((await example.json()).format,'aurven-testnet-rotation-record-v1');
   const setup=await (await fetch(origin+'/local/setup.js')).text();
   for (const [,label] of setup.matchAll(/textContent='([^']+)'/g)) assert.doesNotMatch(translateText(label,'en'),/[\u3400-\u9fff]/);
   assert.equal((await read()).root,'0x'+'00'.repeat(16));

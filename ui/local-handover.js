@@ -1,7 +1,8 @@
 import {accountRpc,readAccount} from './account-state.js';
 import {localSimulationEndpoint} from './local-transfer.js';
 import {keccak256} from './lib/keccak.js';
-import {EXEC_LIMIT,PROOF_LEN,leftWord,word,rekeyHasher,grind,encodeRekey,rootFromProof} from './lib/evmwots.js';
+import {EXEC_LIMIT,leftWord,word,rekeyHasher,grind,encodeRekey,rootFromProof} from './lib/evmwots.js';
+import {verifyRotationCalldata} from './rotation-calldata.js';
 import {fromHex} from './local-proof.js';
 import {hex,fail,validateOffer,handoverFields} from './vault-crypto.js';
 export {validateOffer};
@@ -40,13 +41,7 @@ export function rotationCalldata(offer,message,proof) {
 }
 export function verifyRotationInput(offer,input) {
   validateOffer(offer);
-  // ABI: seven argument words, one dynamic length word, then the fixed-size WOTS proof.
-  const head=10,wordChars=64,proofStart=head+8*wordChars;
-  if(typeof input!=='string'||input.length!==proofStart+2*PROOF_LEN||!/^0x[0-9a-f]+$/.test(input))fail('HANDOVER_PROOF');
-  const salt=Number(BigInt('0x'+input.slice(head+4*wordChars,head+5*wordChars)));
-  if(!Number.isInteger(salt)||salt>0xffffffff)fail('HANDOVER_PROOF');
-  const rnd=input.slice(head+5*wordChars,head+5*wordChars+32),digest=hex(rotationHasher(offer,fromHex(rnd))(salt));
-  if(rotationCalldata(offer,{rnd,salt,digest},fromHex(input.slice(proofStart)))!==input)fail('HANDOVER_PROOF');
+  verifyRotationCalldata({...offer,leaf:EXEC_LIMIT},input);
 }
 export async function localNode(endpoint) {
   if (!localSimulationEndpoint(endpoint,31337) || new URL(endpoint).hostname!=='127.0.0.1') fail('SIGN_LOCAL');

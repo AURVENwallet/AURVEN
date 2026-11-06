@@ -1,0 +1,16 @@
+{
+  "format": "aurven-testnet-rotation-record-v1",
+  "chainId": 97,
+  "account": "0x1b1853d31d483dceae241b0dca77ec4997ddd49a",
+  "payer": "0x00e6344b5b447d5cf7975dac1b6037887aaa4566",
+  "nonce": "0x9",
+  "startBlock": "0x868c5a6",
+  "epoch": 1,
+  "leaf": 960,
+  "deadline": 1793940476,
+  "oldSeed": "0x440cfcffd841e5ac9f790d13e3eda14e",
+  "oldRoot": "0xd6ef186fa7f9ac594f801168ddea2270",
+  "newSeed": "0x95b5dd080c194a19114dd5157d3d70fe",
+  "newRoot": "0xb8206f7b292ca546e590efe9eaba424a",
+  "dataHash": "0x089946050888f5f61f4c24600636c77cce86ff8b10a6e6ba212e89e93e618bf4"
+}

@@ -10,17 +10,19 @@ export function testnetClients(primary,secondary,signal) {
 async function headAt(rpc,tag) {
   const head=await rpc('eth_getBlockByNumber',[tag,false]);
   const quantity=/^0x(?:0|[1-9a-f][0-9a-f]{0,63})$/i;
-  if (!head || !quantity.test(head.number) || (tag!=='latest' && head.number!==tag) ||
+  if (!head || !quantity.test(head.number) || (!['latest','finalized'].includes(tag) && head.number!==tag) ||
       !/^0x[0-9a-f]{64}$/i.test(head.hash) || !quantity.test(head.timestamp) ||
       Math.abs(Date.now()/1000-Number(BigInt(head.timestamp)))>=120) throw new Error('NET_UNVERIFIED');
   return head;
 }
-export async function latestTestnetHead(rpc) {
+export async function readTestnetHead(rpc,tag) {
+  if (!['latest','finalized'].includes(tag)) throw new Error('NET_UNVERIFIED');
   if (await rpc('eth_chainId')!=='0x61') throw new Error('TRIAL_CHAIN');
-  return headAt(rpc,'latest');
+  return headAt(rpc,tag);
 }
-export async function alignedTestnetHeads(clients) {
-  const heads=await Promise.allSettled(clients.map(latestTestnetHead));
+export const latestTestnetHead=rpc=>readTestnetHead(rpc,'latest');
+export async function alignedTestnetHeads(clients,tag='latest') {
+  const heads=await Promise.allSettled(clients.map(rpc=>readTestnetHead(rpc,tag)));
   const latest=heads.map(entry=>entry.status==='fulfilled'?entry.value:null);
   const aligned=[...latest];
   let conflict=false;

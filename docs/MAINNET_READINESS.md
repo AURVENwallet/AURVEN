@@ -69,7 +69,16 @@ Two isolated Edge profiles exercised the local launcher on chain 31337. The orig
 
 The drill requires one subsequent local block. Automated checks cover an altered or expired offer and a chain rollback. Public-testnet confirmation policy, multiple independent observations, interrupted submissions, historical-root enforcement and independent lost-device recovery remain open. [Run the two-profile drill](../README.md#rehearse-a-device-handover).
 
+### Recovering a rotation after a lost reply
+
+The receiving browser can verify a portable public record on chain 97. Both BSC testnet endpoints must report fresh finalized heads and agree on the common block. The verifier checks the payer and nonce, canonical inclusion, transaction destination and value, calldata hash, the WOTS proof against the expected source key, the new-epoch event, and the pinned account's current key state. It rereads the finalized heads and the common block before showing a result. A missing or contradictory observation clears the previous result.
+
+On 2026-11-06 both public endpoints rejected the historical filtered log query and reported pruned historical nonce state near the published epoch-2 rotation. With the transaction hash omitted, the browser found the payment in block **141084075** by reading block bodies. Both endpoints confirmed the receipt and the active epoch-2 root at common finalized block **141103334**. The bundled example starts five blocks before inclusion. Exports from the managed wallet use the actual preview start block. This public check observed an existing same-vault rotation. [Published transaction](https://testnet.bscscan.com/tx/0x9df38d9e37eb01e9bcaedf6a207e69fdb58e5b052b0854d5fe5c5cb5df78b69e).
+
+Two local interruption drills withheld the sender's reply after submitting a real rotation to Anvil. On chain 31337 the receiving profile recovered the cross-device handover hash and the original journal retained its rotation leaf after reload. Separately, on a chain-97 fixture the locked managed wallet exported its rotation record. A clean browser recovered the exact hash from that file without a wallet or a second submission. Withholding one endpoint suppressed the result. The chain-97 fixture used two routes to one local node. Public cross-device signing, recovery of an unmined authorization, and independent recovery after losing the original signer remain open.
+
 ## Disposable browser transfer
+
 
 Open [Test Wallet](https://aurven.site/wallet.html#testnetTrial) in a browser with an injected payer wallet on BSC testnet and enough faucet tBNB for gas. Connect, enter a regular recipient address and preview both addresses and the maximum fee. The payer wallet asks for one contract creation with a value of one wei. The constructor checks chain 97, creates a pinned smart account, activates a fresh tree, funds it and executes the one-wei transfer in the same transaction. A failure reverts all these steps. The browser generates the one-time keys in a disposable worker, commits each signing leaf to IndexedDB before signing and discards the keys afterwards.
 

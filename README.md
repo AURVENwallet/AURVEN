@@ -51,6 +51,12 @@ Start the local wallet as above. Use two separate browser profiles on the same c
 
 The receiver stores the request inside its encrypted vault and can unlock it again with its own password. The source reserves its rotation leaf before signing. If a submission is interrupted, check the receiver for a receipt. If there is still no receipt or the offer expired after reservation, restart the disposable launcher for a fresh rehearsal. A real handover requires a working original signer. Independent lost-device recovery and public-testnet handover remain open.
 
+### Recover a BSC testnet rotation receipt
+
+In the managed account history, select a key rotation and choose **Export public rotation record**. The original profile can export the record while locked, including after a payer reply was lost. The record contains the account, payer, payment nonce, search start block, expected keys, deadline, signing leaf and a hash of the signed calldata. It carries no executable authorization.
+
+Open **Recover a testnet rotation receipt** in another browser. Choose **My public rotation record**, select the file and click **Find rotation transaction**. Both endpoints must agree on the transaction and a common finalized block. The result shows whether the receiving root was active at that block or a later rotation already took place. If historical nonces are unavailable, continue in ranges of 16 blocks or supply a known transaction hash. Choose **Published rotation example** to try the check without a wallet or test coins. [Open the receipt checker](https://aurven.site/wallet.html#rotationRecovery).
+
 ### Run the test suite and static website
 
 Requires Node.js 22+, Python 3 and Foundry 1.8.1. Solidity 0.8.33 is pinned in foundry.toml. The static website has no package-install or frontend build step.

@@ -5,6 +5,7 @@ import {trialEndpoint,payerAccount,inTbnb} from './browser-trial.js';
 import {previewNetwork,submitNetwork,reconcileNetwork,needsReceiptCheck,checkOldApproval} from './network-account.js';
 import {compareNetworkReceipts} from './network-receipt.js';
 import {readAccount} from './account-state.js';
+import {exportRotationRecord} from './testnet-rotation.js';
 
 const el=id=>document.getElementById(id),endpoint=trialEndpoint;
 
@@ -58,6 +59,8 @@ function render(){
   el('netPreview').disabled=busy||!payer;el('netConfirm').disabled=busy||!plan;
   el('netSample').disabled=busy;
   el('netHistory').hidden=!row;if (!row) return;
+  el('netRotationExport').hidden=row.kind!=='rotate'||!row.intent||!row.dataHash;
+  el('netRotationExport').disabled=busy;
   el('netCheck').disabled=busy||!row.dataHash;el('netManual').hidden=!row.dataHash||(!needsReceiptCheck(row)&&['included','reverted','replaced'].includes(row.status));
   el('netOld').hidden=row.kind!=='send'||row.status!=='included'||needsReceiptCheck(row);el('netOld').disabled=busy;
   const details=[states[row.status]??''];
@@ -160,6 +163,15 @@ el('netOld').onclick=()=>action(async()=>{
   const result=await checkOldApproval(endpoint,selected());status('旧授权已被合约拒绝 · '+result.reason+' · #'+BigInt(result.block)+' · 主节点只读模拟');
 });
 el('netRecords').onchange=()=>{el('netHash').value='';render();};
+el('netRotationExport').onclick=()=>{
+  try{
+    const record=exportRotationRecord(selected());
+    const url=URL.createObjectURL(new Blob([JSON.stringify(record,null,2)+'\n'],{type:'application/json'}));
+    const link=document.createElement('a');link.href=url;link.download='aurven-rotation-'+record.account+'-'+record.epoch+'.json';
+    link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    status('公开记录已导出，可在另一浏览器核对回执。');
+  }catch{status('这条历史记录缺少核对换根所需的字段。');}
+};
 for (const id of ['netKind','netAccount','netTo']) el(id).addEventListener('input',()=>{reset();render();});
 for (const evt of ['accountsChanged','chainChanged']) window.ethereum?.on?.(evt,()=>{payer=undefined;reset();render();});
 refresh().catch(()=>status('请检查浏览器是否允许本地存储。'));
