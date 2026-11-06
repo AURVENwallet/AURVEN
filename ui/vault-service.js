@@ -1,24 +1,28 @@
-import {VaultError,fail,createEnvelope,validateEnvelope,parseBackup,deriveVaultKey,decryptPayload,
+import {VaultError,fail,hex,createEnvelope,validateEnvelope,parseBackup,deriveVaultKey,decryptPayload,
   encryptPayload,validateReservation,reservationId,MAX_RESERVATIONS} from './vault-crypto.js';
-import {hex} from './vault-crypto.js';
 import {ProofWorkerClient} from './proof-worker-client.js';
 import {LOCAL_PROOF_FORMAT,PROOF_ACCOUNT,validateProofMessage,proofDigest,verifyLocalProof,proofTreeState} from './local-proof.js';
 import {readAccount} from './account-state.js';
 import {validateReviewDraft,compareDraftAccount,compareDraftState,nextTransferLeaf} from './draft-preflight.js';
 import {localSimulationEndpoint,reservedRow,simulateLocalProof} from './local-transfer.js';
 import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
+import {encodeNetworkAction,setup,spendingLeaf,validateIntent,validateNetworkPlan} from './vault-network-proof.js';
+import {trialEndpoint} from './browser-trial.js';
 
 export class TestVault {
   #key;#walletId;#revision=0;#generation=0;#timer;#deadline=0;#details=null;#observed=new Map();
   #proofWorker;#proofTree;#proofGeneration=0;
   #bindingWorker;#bindingAbort;#bindingGeneration=0;#bindingResult;#reviewTicket;
   #reserved;#simulationAbort;
+  #networkWorker;
   constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
     bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,
-    transferWorkerFactory=()=>new ProofWorkerClient(new URL('./local-transfer-worker.js',import.meta.url))}={}){
+    transferWorkerFactory=()=>new ProofWorkerClient(new URL('./local-transfer-worker.js',import.meta.url)),
+    networkWorkerFactory=()=>new ProofWorkerClient(new URL('./vault-network-worker.js',import.meta.url))}={}){
     if(!locks?.request||!Number.isFinite(idleMs)||idleMs<=0)fail('UNSUPPORTED');
     this.store=store;this.locks=locks;this.now=now;this.idleMs=idleMs;this.onLock=onLock;this.workerFactory=workerFactory;
     this.bindingWorkerFactory=bindingWorkerFactory;this.accountReader=accountReader;this.transferWorkerFactory=transferWorkerFactory;
+    this.networkWorkerFactory=networkWorkerFactory;
   }
   get unlocked(){if(this.#key&&this.now()>=this.#deadline)this.lock('idle');return !!this.#key;}
   get details(){return this.#details?{...this.#details,unlocked:this.unlocked}:null;}
@@ -29,6 +33,7 @@ export class TestVault {
   }
   #arm(){clearTimeout(this.#timer);this.#deadline=this.now()+this.idleMs;this.#timer=setTimeout(()=>this.lock('idle'),this.idleMs);this.#timer.unref?.();}
   lock(reason='manual'){
+    this.#networkWorker?.dispose();this.#networkWorker=undefined;
     const hadKey=!!this.#key;this.#generation++;this.#key=undefined;this.#walletId=undefined;
     this.cancelProof();
     this.cancelAccountCheck();
@@ -189,6 +194,52 @@ export class TestVault {
     });
   }
   get accountCheck(){return this.unlocked&&this.#bindingResult?structuredClone(this.#bindingResult):null;}
+  async authorizeNetworkAction(input,progress) {
+    const context=this.#capture(),plan=structuredClone(input);
+    validateNetworkPlan(plan);
+    if (context.id!==plan.walletId) fail('NET_KEYS');
+    const fresh=async()=>{
+      this.#check(context);validateNetworkPlan(plan);
+      if (setup(plan.kind)) return;
+      const s=await this.accountReader({endpoint:trialEndpoint,account:plan.account,chainId:97});
+      if (s.codeHash!==plan.snapshot.codeHash || s.root!==plan.snapshot.root || s.pubSeed!==plan.snapshot.pubSeed ||
+          s.epoch!==plan.snapshot.epoch || s.next!==plan.snapshot.next ||
+          (plan.kind==='send' && BigInt(s.balanceWei)<1n)) fail('DRAFT_STALE');
+      this.#check(context);
+    };
+    return this.#exclusive(async()=>{
+      const {record,payload}=await this.#load(context);
+      if (record.mode!=='active' || record.chainId!==97) fail('RECOVERY');
+      if (payload.journal.length>=MAX_RESERVATIONS) fail('FULL');
+      await fresh();
+      const leaf=spendingLeaf(plan,payload.journal),worker=this.networkWorkerFactory();
+      this.#networkWorker=worker;
+      try {
+        const intent=await worker.request('prepare',{record,key:context.key,plan,leaf},progress);
+        this.#check(context);validateIntent(plan,intent,leaf);
+        const row=validateReservation({chainId:97,account:plan.account,epoch:plan.snapshot?.epoch??0,
+          pubSeed:intent.seed,root:intent.root,leaf,digest:intent.digest});
+        if (payload.journal.some(entry=>reservationId(entry)===reservationId(row))) fail('USED');
+        if (intent.newRoot && payload.journal.some(entry=>entry.root===intent.newRoot)) fail('NET_KEYS');
+        await fresh();
+        payload.journal.push(row);
+        const updated=await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
+        this.#check(context);await this.store.compareAndSwap(record,updated);this.#check(context);
+        this.#remember(updated);this.#revision=updated.revision;this.#setDetails(updated,payload);
+        const proof=await worker.request('sign',{digest:row.digest});
+        try {
+          let init;
+          if (setup(plan.kind)) {
+            const response=await fetch(new URL('./assets/vault-setup-init.json',import.meta.url),{redirect:'error'});
+            if (!response.ok) fail('NET_PROOF');
+            init=await response.json();
+          }
+          await fresh();
+          return {data:encodeNetworkAction(plan,intent,proof,init),intent};
+        } finally {proof.fill(0);}
+      } finally {worker.dispose();if (this.#networkWorker===worker) this.#networkWorker=undefined;}
+    });
+  }
   async suggestedTransferLeaf(snapshot) {
     const binding = this.accountCheck;
     if (!binding?.matched || this.#details.mode !== 'active' || binding.chainId !== snapshot.chainId ||

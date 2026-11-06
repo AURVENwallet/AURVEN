@@ -117,6 +117,15 @@ export const walletDraftActions = {
   reserve:(draft,endpoint,report,signal)=>draftAction(v=>v.reserveTransferDraft(draft,endpoint,report,signal)),
   nextLeaf:state=>vault?.unlocked ? draftAction(v=>v.suggestedTransferLeaf(state)) : state.next
 };
+export function networkWalletId() {
+  if (!vault?.unlocked || vault.details.mode!=='active' || vault.details.chainId!==97) throw new Error('NET_VAULT');
+  return vault.details.walletId;
+}
+export async function authorizeNetwork(plan,progress) {
+  networkWalletId();
+  try {return await vault.authorizeNetworkAction(plan,progress);}
+  finally {details=await vault.inspect();render();}
+}
 el('accountKeyForm').addEventListener('input',()=>{
   clearAccountCheck();el('accountKeyStatus').textContent='信息已修改，请重新核验。';
 });

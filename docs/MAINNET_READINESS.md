@@ -1,6 +1,24 @@
 # BSC wallet release readiness
 
-Updated 2026-11-06. A browser and a command-line pilot have each completed a disposable native transfer on BSC testnet (chain 97). The reusable encrypted browser vault supports draft review, durable reservations and local signed simulation. Persistent public-testnet signing from that vault, active-tree rotation on public testnet and independent device recovery remain open.
+Updated 2026-11-06. An encrypted browser vault created a reusable smart account on BSC testnet (chain 97), signed two transfers, rotated to a fresh active tree, and signed a third transfer from the same address. Lost-device recovery, reorganization drills and independent security review remain open.
+
+## Reusable browser account
+
+Open the [reusable account panel](https://aurven.site/wallet.html#managedAccount) and unlock an original chain-97 test vault in the same browser profile. Connect a separate test wallet with faucet tBNB to pay gas. Account creation deposits three wei. Each transfer of one wei, key rotation or top-up of three wei has its own fee preview and payer confirmation.
+
+On 2026-11-06, Edge generated the hash-based authorizations for smart account [`0x1b1853d31d483dceae241b0dca77ec4997ddd49a`](https://testnet.bscscan.com/address/0x1b1853d31d483dceae241b0dca77ec4997ddd49a). A test provider backed by the dedicated faucet payer signed the outer transactions. Two official nodes verified the receipts. The payer received all three one-wei transfers.
+
+| Action and signing leaf | Mined block | Gas used |
+| --- | ---: | ---: |
+| Create, activate epoch 1 and deposit 3 wei (bootstrap leaf 8) | [141083856](https://testnet.bscscan.com/tx/0x7ed70a1b90004fb20718860626b46b287c0ecc62eefb5f39ba4ac154efaf2475) | 1,546,083 |
+| Transfer 1 wei (epoch 1, leaf 0) | [141083916](https://testnet.bscscan.com/tx/0x5c39e386b21d431e34491981e43fc950ed8f2ba9d0a90845108765469c01500d) | 182,397 |
+| Transfer 1 wei (epoch 1, leaf 1) | [141083977](https://testnet.bscscan.com/tx/0xd4375fec221a613bbe4caddc53fc04b00c6eb64214d5e5b87913b3f3e556a953) | 203,416 |
+| Rotate to epoch 2 (epoch 1, leaf 960) | [141084075](https://testnet.bscscan.com/tx/0x9df38d9e37eb01e9bcaedf6a207e69fdb58e5b052b0854d5fe5c5cb5df78b69e) | 197,131 |
+| Transfer 1 wei (epoch 2, leaf 0) | [141084144](https://testnet.bscscan.com/tx/0xa8d63f807531fb2d545a5f09aac3871159000166a696aae82cacfb4930a27835) | 203,423 |
+
+The payer reply to the second transfer was deliberately dropped. After reopening the page and unlocking the vault, the browser found the original transaction by payer and nonce. A read-only replay of its exact calldata returned `BadSignature` at block 141084082 under the new root. At that block the old approval was still within its deadline, leaf 1 was eligible and the account held one wei. The final transfer used leaf 0 of the new tree and left the account at epoch 2, next leaf 1, balance zero. The five transactions cost **0.000233245 tBNB** in total. The replay required no transaction or fee.
+
+The browser stores up to eight account creations (including unresolved creations) and 32 public action records. At capacity it discards the oldest eligible settled action or expired preparation. It keeps confirmed account creations and unresolved wallet requests. Encrypted leaf reservations are stored separately and never pruned. Imported vaults are read-only. Retail wallet compatibility and recovery after losing the original device still require testing.
 
 ## Disposable browser transfer
 
@@ -63,7 +81,7 @@ These estimates assume continuous development of the single-signer native-coin w
 
 | Milestone | Planning range from this baseline | Evidence required to pass |
 | --- | --- | --- |
-| Public testnet trial | 2–4 weeks | A fresh browser vault can create a chain-97 account, fund it with faucet tBNB, activate a root, transfer and rotate. Publish successful transaction hashes and mined gas with the expected balance, epoch and leaf changes. Exercise expired, reverted and interrupted submissions. |
+| Single-device public testnet pilot | Basic path completed on 2026-11-06 | Five mined actions and recovery after a lost payer reply are recorded above. Outstanding pilot cases include expired, dropped, replaced, reverted and reorganized submissions, plus compatibility with retail wallets. |
 | Recovery and pilot | Allow a further 4–8 weeks for engineering and drills | Persist the exact signed payload before releasing it. Reconcile pending, dropped and reorganized transactions without signing twice with a leaf. Demonstrate safe device handover, lost-device recovery, historical-root rejection and fail-closed behavior after restoring an old profile. Run a public testnet pilot through those scenarios. |
 | Public real-asset wallet | Conditional planning range of 3–6 months total | Obtain independent cryptographic parameter and contract/client reviews, fix and retest findings, and publish results. Resolve custody and key-reuse findings before launch. Verify network-specific builds, deployment reproducibility, live monitoring, incident response and a funded mainnet gas payer. Obtain explicit mainnet deployment approval. |
 

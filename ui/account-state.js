@@ -30,7 +30,11 @@ export function accountRpc(endpoint, signal) {
     if (!response.ok) throw new Error('RPC 请求失败，请检查地址和跨域设置');
     const payload = await response.json();
     if (payload.id !== id || payload.jsonrpc !== '2.0' || payload.error || payload.result === undefined) {
-      throw new Error('RPC 未返回有效结果（' + method + '）');
+      const error=new Error('RPC 未返回有效结果（' + method + '）');
+      if (payload.id===id && payload.jsonrpc==='2.0' && method==='eth_call' && typeof payload.error?.data==='string') {
+        error.revertData=payload.error.data;
+      }
+      throw error;
     }
     return payload.result;
   };

@@ -1,5 +1,5 @@
 import {accountRpc} from './account-state.js';
-import {trialEndpoint,payerAccount,previewTrial,recoverTrial,requireTrial} from './browser-trial.js';
+import {trialEndpoint,payerAccount,previewTrial,recoverTrial,requireTrial,inTbnb} from './browser-trial.js';
 import {openTrialStore,updateTrial} from './browser-trial-store.js';
 import {submitTrial} from './browser-trial-submit.js';
 import {ProofWorkerClient} from './proof-worker-client.js';
@@ -22,10 +22,6 @@ const states={preparing:'已开始准备，尚未请求付款。',requested:'已
   waiting:'等待链上回执。',included:'已核对转账回执',reverted:'测试网交易已回滚。',declined:'付款请求已取消。',stopped:'准备已停止，尚未请求付款。'};
 const status=text=>{el('trialStatus').textContent=text;};
 const errText=e=>e.code===4001?states.declined:errors[e.message]??'操作未完成，请查看试转记录并核对网络。';
-function inTbnb(wei) {
-  const n=BigInt(wei),fraction=(n%10n**18n).toString().padStart(18,'0').replace(/0+$/,'');
-  return (n/10n**18n).toString()+(fraction?'.'+fraction:'')+' tBNB';
-}
 let payer,plan,rows=[],busy=false,store,worker;
 const provider=()=>window.ethereum;
 async function storage() {return store??=await openTrialStore();}

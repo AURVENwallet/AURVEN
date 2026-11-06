@@ -6,6 +6,7 @@
 <p>同步测试账户，核对状态，准备待签名交易。</p>
 <a class="activity-shortcut" href="#activity">查看交易记录 ↓</a>
 <a class="activity-shortcut" href="#testnetTrial">测试网试转 ↓</a>
+<a class="activity-shortcut" href="#managedAccount">可复用测试账户 ↓</a>
 <a class="activity-shortcut" href="https://testnet.bscscan.com/tx/0x9e36f3ac70946345ed88afe3f6a6f2f76ea317bf07fb1bdb21b5053b6c34c7e2" target="_blank" rel="noopener noreferrer">在 BscScan 查看首笔测试网转账 ↗</a>
 <a id="localSetupGuide" class="activity-shortcut" href="#localSetup" hidden>前往本地账户配对 ↓</a>
 </div>
@@ -48,8 +49,22 @@ node scripts/local-wallet.mjs</code></pre>
 <p class="vault-recovery" id="vaultRecovery" hidden>此密钥库来自备份，仅供查看和导出。恢复后的签名功能尚未开放。</p>
 <form id="vaultUnlockForm"><fieldset class="vault-fields" disabled><label for="vaultPassword">密钥库密码<input id="vaultPassword" type="password" maxlength="256" required autocomplete="current-password"></label><button type="submit" class="run">解锁测试密钥库 <span aria-hidden="true">↗</span></button></fieldset></form>
 <div class="vault-actions" id="vaultActions" hidden><button type="button" class="run" id="vaultExport">导出加密备份</button><button type="button" id="vaultLock">立即锁定</button></div></div>
-</div><aside class="vault-info"><ol><li><strong>在本机加密</strong><p>密钥库保存在当前浏览器。清除网站数据会移除本地记录，请保存加密备份。</p></li><li><strong>离开即锁定</strong><p>切到后台、离开页面或两分钟无操作后自动锁定。重新使用时需要密码。</p></li><li><strong>备份与密码分开保存</strong><p>备份文件经过加密，但仍应私密保管。密码遗失后无法替你找回。</p></li></ol><p class="vault-scope">支持消息签名自检和本机 Anvil 转账试签。BSC 测试网可复核并预留草稿。</p></aside></div>
+</div><aside class="vault-info"><ol><li><strong>在本机加密</strong><p>密钥库保存在当前浏览器。清除网站数据会移除本地记录，请保存加密备份。</p></li><li><strong>离开即锁定</strong><p>切到后台、离开页面或两分钟无操作后自动锁定。重新使用时需要密码。</p></li><li><strong>备份与密码分开保存</strong><p>备份文件经过加密，但仍应私密保管。密码遗失后无法替你找回。</p></li></ol><p class="vault-scope">支持消息签名自检、本机转账试签，以及在 BSC 测试网上连续转账和轮换密钥。</p></aside></div>
 <output class="vault-status" id="vaultStatus" aria-live="polite">正在检查本地存储…</output>
+</section>
+<section class="wallet-demo trial-panel" id="managedAccount" aria-labelledby="managedTitle">
+<div class="demo-heading"><div><p class="eyebrow">BSC TESTNET / SMART ACCOUNT</p><h2 id="managedTitle">可复用测试账户</h2>
+<p>先解锁上方链 97 密钥库，再连接支付 Gas 的测试钱包。建户存入 3 wei 测试币。每次转账和轮换密钥都需要单独确认。</p></div></div>
+<button id="netConnect" type="button">连接测试网付款钱包</button>
+<div class="trial-form"><label>操作<select id="netKind"><option value="create">建户并存入 3 wei</option><option value="send">转出 1 wei</option><option value="rotate">轮换签名密钥</option><option value="fund">再存入 3 wei</option></select></label>
+<label id="netAccountField" hidden>智能账户<select id="netAccount"></select></label>
+<label id="netToField" hidden>收款地址<input id="netTo" placeholder="0x…" maxlength="42" autocomplete="off"></label>
+<button id="netPreview" type="button">预览操作</button></div>
+<div id="netReview" hidden><dl class="trial-values"><dt>操作</dt><dd id="netAction"></dd><dt>智能账户</dt><dd id="netAddress"></dd><dt>付款钱包</dt><dd id="netPayer"></dd><dt>资金去向</dt><dd id="netDestination"></dd><dt>请求的手续费上限</dt><dd id="netFee"></dd></dl><button id="netConfirm" type="button" class="run">确认并打开付款钱包</button></div>
+<output id="netStatus" class="demo-status" aria-live="polite">仅供测试网研究。备份恢复后仅可查看。</output>
+<div id="netHistory" hidden><div class="trial-form"><label>操作记录<select id="netRecords"></select></label><button id="netCheck" type="button">核对交易回执</button><button id="netOld" type="button" hidden>只读验证旧授权</button></div>
+<label id="netManual" hidden>付款钱包里的交易哈希（可选）<input id="netHash" placeholder="0x…" maxlength="66"></label>
+<p id="netOutcome" aria-live="polite"></p><a id="netExplorer" class="activity-shortcut" target="_blank" rel="noopener noreferrer" hidden>在 BscScan 查看交易 ↗</a></div>
 </section>
 
 <section id="localSetup" class="key-vault" aria-labelledby="localSetupTitle" hidden>

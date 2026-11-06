@@ -9,6 +9,10 @@ const gasLimit=3000000n;
 const completedTopic='0x'+hex(keccak256(new TextEncoder().encode('TrialCompleted(address,address,address)')));
 const topicAddress=address=>'0x'+hex(addressWord(address));
 export const q=n=>'0x'+BigInt(n).toString(16);
+export function inTbnb(wei) {
+  const n=BigInt(wei),fraction=(n%10n**18n).toString().padStart(18,'0').replace(/0+$/,'');
+  return (n/10n**18n).toString()+(fraction?'.'+fraction:'')+' tBNB';
+}
 export function requireTrial(ok,code) {if (!ok) throw new Error(code);}
 export function hashBytes(value) {
   requireTrial(typeof value==='string' && /^0x(?:[0-9a-f]{2}){1,48000}$/i.test(value),'TRIAL_DATA');
@@ -28,7 +32,7 @@ export async function payerAccount(provider,interactive=false) {
   requireTrial(Array.isArray(accounts) && ADDRESS.test(accounts[0]),'TRIAL_PAYER');
   return accounts[0].toLowerCase();
 }
-export async function previewTrial(rpc,payer,recipient) {
+export async function previewTrial(rpc,payer,recipient,{gas=gasLimit,value=1n}={}) {
   requireTrial(ADDRESS.test(payer) && ADDRESS.test(recipient) && BigInt(recipient)>0xffffn,'TRIAL_RECIPIENT');
   requireTrial(await rpc('eth_chainId')==='0x61','TRIAL_CHAIN');
   const [nonce,pending,head,price,balance,payerCode,recipientCode]=await Promise.all([
@@ -39,13 +43,13 @@ export async function previewTrial(rpc,payer,recipient) {
   requireTrial(nonce===pending,'TRIAL_NONCE');
   requireTrial(payerCode==='0x' && recipientCode==='0x','TRIAL_RECIPIENT');
   requireTrial(BigInt(price)>0n && BigInt(price)<=5000000000n,'TRIAL_PRICE');
-  requireTrial(BigInt(balance)>=BigInt(price)*gasLimit+1n,'TRIAL_BALANCE');
+  requireTrial(BigInt(balance)>=BigInt(price)*gas+value,'TRIAL_BALANCE');
   const now=Number(BigInt(head.timestamp));
   requireTrial(Number.isSafeInteger(now) && Math.abs(Date.now()/1000-now)<120,'TRIAL_CLOCK');
   const wrapper=createdAddress(payer,nonce),account=createdAddress(wrapper,1);
   requireTrial(![wrapper,account].includes(recipient.toLowerCase()),'TRIAL_RECIPIENT');
   return {id:crypto.randomUUID(),payer:payer.toLowerCase(),recipient:recipient.toLowerCase(),nonce,wrapper,account,
-    startBlock:head.number,deadline:now+1800,gas:q(gasLimit),gasPrice:price};
+    startBlock:head.number,deadline:now+1800,gas:q(gas),gasPrice:price};
 }
 export async function checkBeforeSend(rpc,provider,plan) {
   requireTrial(await payerAccount(provider)===plan.payer,'TRIAL_PAYER');
@@ -55,10 +59,10 @@ export async function checkBeforeSend(rpc,provider,plan) {
   requireTrial(pending===plan.nonce,'TRIAL_NONCE');
   const now=Number(BigInt(head.timestamp));
   requireTrial(Math.abs(Date.now()/1000-now)<120 && now+30<plan.deadline,'TRIAL_CLOCK');
-  requireTrial(BigInt(balance)>=BigInt(plan.gas)*BigInt(plan.gasPrice)+1n,'TRIAL_BALANCE');
+  requireTrial(BigInt(balance)>=BigInt(plan.gas)*BigInt(plan.gasPrice)+BigInt(plan.value??1),'TRIAL_BALANCE');
 }
 
-async function findByNonce(rpc,row,head) {
+export async function findByNonce(rpc,row,head) {
   let low=BigInt(row.startBlock),high=head;
   const nonce=BigInt(row.nonce);
   const count=async height=>BigInt(await rpc('eth_getTransactionCount',[row.payer,q(height)]));

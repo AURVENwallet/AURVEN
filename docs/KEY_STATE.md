@@ -1,6 +1,14 @@
 # Key trees, reservations and recovery
 
-The reusable browser vault signs self-check messages using a separate tree and can sign a reserved transfer for simulation on disposable local Anvil. The separate chain-97 browser trial generates fresh identity and active trees, records each use before signing, and transfers one wei. Its signing material is discarded when the worker exits. Independent recovery authorization remains open. Use only disposable local/testnet keys.
+The original encrypted browser vault can sign on BSC testnet from one browser profile. The reusable account panel creates a three-wei test account, supports separate one-wei transfers and rotates its active signing tree. The disposable trial and local simulation have separate workflows. Independent recovery authorization remains open.
+
+## Reusable account signing
+
+Creation uses a transient identity tree to authorize the initial active root inside the chain-97 setup constructor. Each active tree is derived from the encrypted master seed, chain, account address, epoch and a fresh public seed. A worker rebuilds the tree and compares its root to the live account. Before any signature leaves the worker, the vault takes the cross-tab writer lock, rechecks the account and commits the exact leaf and digest to encrypted storage. The UI independently reconstructs each proof and binds it to the intended action before requesting payment.
+
+For an ordinary transfer, leaf selection advances beyond all locally recorded uses for that tree and respects the on-chain counter. Rotation uses leaf 960 or later. A failed signing or wallet request leaves the reservation consumed. After rotation a new root can begin at leaf 0. The deployed account rejects its current root as a successor but keeps no registry of earlier roots. A successful rejection under a new root demonstrates rejection at that point in time.
+
+The public action record stores the expected payer, nonce and calldata hash before opening the external wallet. Reloading the original browser profile can recover a mined payment by hash or nonce. Losing or rolling back the profile can lose off-chain signing history. Restored backups stay read-only. See the [five public receipts and replay check](MAINNET_READINESS.md#reusable-browser-account).
 
 ## Tree structure
 
@@ -88,4 +96,4 @@ Node tests exercise encryption, tampering, import bounds, lock deadlines, concur
 
 To run browser checks, copy `test/browser/vault-checks.html` and `test/browser/vault-checks.js` into ignored `ui/demo/`, serve only `ui/` over loopback, then open `/demo/vault-checks.html` and click **Run storage checks**. The harness uses unique disposable database names and never opens the primary wallet database. Remove only these two copied files when done; retain any unrelated local demo files.
 
-The self-check uses worker-based generation and validates the message and key context. The account root checker reconstructs identity and active trees for read-only comparison. For local simulation the browser also revalidates the account and journal before releasing a signature. The disposable public-testnet CLI saves the exact signed transactions before sending and resumes by hash. The browser still needs its own persistent signing and reconciliation flow. Historical-root rejection, power-loss and device-handover behavior, independent recovery, public active-tree rotation and specialist review remain open. See the [release gates and mined receipts](MAINNET_READINESS.md).
+The self-check uses worker-based generation and validates the message and key context. The account root checker reconstructs identity and active trees for read-only comparison. For local simulation the browser also revalidates the account and journal before releasing a signature. The disposable public-testnet CLI saves the exact signed transactions before sending and resumes by hash. The reusable browser flow stores its signing journal and recovers mined payments after reload. Reconciliation of all replacement and reorganization cases, historical-root enforcement, physical power-loss drills, device handover, independent recovery and specialist review remain open. See the [release gates and mined receipts](MAINNET_READINESS.md).

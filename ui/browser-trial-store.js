@@ -2,12 +2,13 @@ import {openVaultStore} from './vault-store.js';
 import {requireTrial} from './browser-trial.js';
 
 export const openTrialStore=()=>openVaultStore('aurven-browser-trial-v1');
-export async function startTrial(store,plan) {
+export async function startTrial(store,plan,retainHistory=rows=>rows) {
   const current=await store.read(), rows=current?.rows??[];
-  requireTrial(rows.length<32,'TRIAL_FULL');
   requireTrial(!rows.some(row=>row.id===plan.id || (row.payer===plan.payer && row.nonce===plan.nonce &&
     ['preparing','requested','waiting'].includes(row.status) && Date.now()/1000<row.deadline)),'TRIAL_IN_USE');
-  const next={rows:[...rows,{...plan,status:'preparing',reservations:[]}]};
+  const keep=retainHistory(rows,plan);
+  requireTrial(keep.length<32,'TRIAL_FULL');
+  const next={rows:[...keep,{...plan,status:'preparing',reservations:[]}]};
   if (current) await store.compareAndSwap(current,next);else await store.create(next);
 }
 export async function updateTrial(store,id,update) {
