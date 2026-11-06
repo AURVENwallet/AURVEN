@@ -41,7 +41,15 @@ The demo creates fresh disposable keys and a new account on your own machine. Op
 
 The sections below document successive implementation stages. Test counts and pending work in a stage describe that stage; see [SECURITY.md](SECURITY.md) for the release-check summary and known limitations.
 
-## Latest milestone: account key-root comparison (2026-11-05)
+## Review an unsigned transfer draft (2026-11-06)
+
+1. Open [Test Wallet](https://aurven.site/wallet.html). Unlock the active vault associated with your deployed local or BSC testnet account. Choose **Check key match** for that account.
+2. Use **On-chain sync** to prepare a single native-coin transfer. Check the recipient and amount in the preview.
+3. Choose **Check current draft**. The wallet recomputes the digest and reads a fresh block to check the account code, key root, active epoch, next leaf, balance and deadline. It also reads the encrypted journal under the local vault lock. A recorded reservation at or above the proposed leaf on the same tree blocks the review.
+
+A successful result identifies the observed block. Editing the draft or locking the vault clears the result. A restored backup can compare roots but cannot pass this check because its journal may be outdated. The review makes no reservation, signature or transaction. Account state can change after the check, and the journal only covers this vault.
+
+## Account key-root comparison (2026-11-05)
 
 Test Wallet now checks whether its unlocked test vault can reconstruct an existing account's key root. Enter a test account and RPC in **Does this key match this account?**, or sync an account below and choose **Check key match**. The vault determines the network. The checker verifies the deployed account version, rebuilds all 1,024 leaves in a separate worker and reads the account again afterward. A changed epoch, public seed, root or next-leaf counter invalidates the check. Matching and non-matching roots are shown explicitly, with the checked block and time.
 

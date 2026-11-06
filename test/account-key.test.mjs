@@ -6,6 +6,7 @@ import {deriveAccountRoot} from '../ui/account-key-engine.js';
 import {validateKeySnapshot} from '../ui/account-key-check.js';
 import {TestVault} from '../ui/vault-service.js';
 import {accountCodeHash} from '../ui/contract-pin.js';
+import {prepareTransfer} from '../ui/transfer.js';
 import {testIdentitySeeds,testActiveSeeds} from '../ui/test-wallet-core.js';
 import {fromHex} from '../ui/local-proof.js';
 import {EvmTreeKey,leafPk} from '../ui/lib/evmwots.js';
@@ -32,13 +33,90 @@ class Client{
 async function setup({store=new Store(),client=new Client(),change=()=>{}}={}){
   const derived=await deriveAccountRoot({record:store.record,key:base.key,snapshot},null,partialTree);
   let reads=0;const reader=async args=>{
-    assert.equal(args.chainId,31337);assert.equal(args.account,account);assert.ok(args.signal);
+    assert.equal(args.chainId,31337);assert.equal(args.account,account);
+    if (reads < 2) assert.ok(args.signal);
     const current={...snapshot,root:derived.root};reads++;await change(current,reads);return current;
   };
   const vault=new TestVault(store,{locks:{request:async(name,options,action)=>action({name})},accountReader:reader,bindingWorkerFactory:()=>client});
   await vault.unlock(password);return {vault,store,client,reads:()=>reads};
 }
 const request={account,endpoint:'https://example.test/disposable-provider-marker'};
+
+async function reviewFixture(change = () => {}, overrides = {}) {
+  const instance = await setup({change: async (state, n) => {
+    state.balanceWei = '1000000000000000000';
+    if (n > 2) await change(state);
+  }});
+  const binding = await instance.vault.checkAccountKeys(request);
+  const transaction = prepareTransfer({account, chainId:31337, recipient:'0x'+'ab'.repeat(20),
+    amount:'0.5',epoch:1,leaf:0,deadline:binding.snapshot.timestamp+600,randomizer:new Uint8Array(16),...overrides});
+  return {...instance, binding, draft:{format:'bsc-key-lab-unsigned-transfer-v2',stateSource:'rpc-snapshot',
+    snapshot:binding.snapshot,leafReserved:false,...transaction}};
+}
+
+test('review corroborates a generated draft with a new chain read and leaves the envelope byte-identical',async()=>{
+  const {vault,draft,store,reads}=await reviewFixture();
+  const original=structuredClone(store.record);
+  const report=await vault.reviewTransferDraft(draft,request.endpoint);
+  assert.equal(reads(),3);assert.deepEqual(report,{digest:draft.digest,leaf:0,blockHash:snapshot.blockHash,blockNumber:'0x1'});
+  assert.deepEqual(store.record,original);vault.lock();
+});
+test('offline, tampered, additional-call and previously reserved drafts fail before querying the provider',async()=>{
+  const {vault,draft,reads}=await reviewFixture();
+  for(const [changes,reason] of [
+    [{stateSource:'manual-offline'},'DRAFT_SOURCE'],[{valueWei:'1'},'DRAFT_DIGEST'],
+    [{recipient:account},'DRAFT_DIGEST'],[{randomizer:'ff'.repeat(16)},'DRAFT_DIGEST'],
+    [{calls:[]},'DRAFT_FORMAT'],[{leafReserved:true},'DRAFT_FORMAT'],[{snapshot:null},'DRAFT_FORMAT'],
+    [{snapshot:{...draft.snapshot,account:5}},'DRAFT_FORMAT']
+  ]) await assert.rejects(vault.reviewTransferDraft({...draft,...changes},request.endpoint),code(reason));
+  vault.cancelAccountCheck();
+  await assert.rejects(vault.reviewTransferDraft(draft,request.endpoint),code('DRAFT_KEYS'));
+  assert.equal(reads(),2);vault.lock();
+});
+test('review catches a changed leaf, rotated root, insufficient balance, or regressed/replaced block',async()=>{
+  for(const [changes,reason] of [
+    [{next:1},'DRAFT_STALE'],[{root:snapshot.root},'DRAFT_KEYS'],[{balanceWei:'1'},'DRAFT_BALANCE'],
+    [{blockNumber:'0x0'},'DRAFT_STALE'],[{blockHash:'0x'+'aa'.repeat(32)},'DRAFT_STALE']
+  ]){
+    const {vault,draft}=await reviewFixture(state=>Object.assign(state,changes));
+    await assert.rejects(vault.reviewTransferDraft(draft,request.endpoint),code(reason));vault.lock();
+  }
+});
+test('expiry uses a fresh block timestamp including the contract maximum horizon',async()=>{
+  for(const offset of [-1,0,3601]){
+    const {vault,draft}=await reviewFixture(undefined,{deadline:snapshot.timestamp+offset});
+    await assert.rejects(vault.reviewTransferDraft(draft,request.endpoint),code('DRAFT_DEADLINE'));vault.lock();
+  }
+});
+test('off-chain journal use blocks the draft even if the chain still shows the original counter',async()=>{
+  const {vault,draft,store}=await reviewFixture();
+  const payload=await decryptPayload(store.record,base.key);
+  payload.journal.push({account,chainId:31337,epoch:1,leaf:7,pubSeed:draft.snapshot.pubSeed.slice(2),root:draft.snapshot.root.slice(2),digest:'aa'.repeat(16)});
+  store.record=await encryptPayload(payload,base.key,{...store.record,revision:store.record.revision+1});
+  const original=structuredClone(store.record);
+  await assert.rejects(vault.reviewTransferDraft(draft,request.endpoint),code('DRAFT_LEAF'));
+  assert.deepEqual(store.record,original);vault.lock();
+});
+test('canceling the review, clearing the key match or locking while the RPC is pending discards its response',async()=>{
+  for (const action of ['abort','clear','lock']){
+    const entered=deferred(),gate=deferred(),controller=new AbortController();
+    const {vault,draft}=await reviewFixture(()=>{entered.resolve();return gate.promise;});
+    const pending=vault.reviewTransferDraft(draft,request.endpoint,controller.signal);
+    await entered.promise;
+    if(action==='abort')controller.abort();
+    if(action==='clear')vault.cancelAccountCheck();
+    if(action==='lock')vault.lock();
+    gate.resolve();await assert.rejects(pending,code(action==='lock'?'LOCKED':'CANCELED'));vault.lock();
+  }
+});
+test('a restored backup cannot pass draft preflight even with a matching root',async()=>{
+  const {vault,draft}=await reviewFixture();vault.lock();
+  const store=new Store();
+  store.record=await encryptPayload(await decryptPayload(store.record,base.key),base.key,{...store.record,mode:'recovery-readonly'});
+  const recovery=await setup({store});
+  assert.equal((await recovery.vault.checkAccountKeys(request)).matched,true);
+  await assert.rejects(recovery.vault.reviewTransferDraft(draft,request.endpoint),code('RECOVERY'));recovery.vault.lock();
+});
 
 test('root check validates pinned contract, test network and complete snapshot context',()=>{
   assert.equal(validateKeySnapshot(snapshot,31337,account).account,account);
@@ -106,7 +184,9 @@ test('worker context tampering and unexpected private fields are rejected',async
   }
 });
 test('changed authenticated vault data fails closed and locks the session',async()=>{
-  const {vault,store}=await setup();store.record.cipher.data='00'+store.record.cipher.data.slice(2);
+  const {vault,store}=await setup();
+  const cipher=store.record.cipher.data;
+  store.record.cipher.data=(parseInt(cipher[0],16)^1).toString(16)+cipher.slice(1);
   await assert.rejects(vault.checkAccountKeys(request),code('AUTH_FAILED'));assert.equal(vault.unlocked,false);assert.equal(vault.accountCheck,null);
 });
 test('locked vault cannot perform root derivation',async()=>{

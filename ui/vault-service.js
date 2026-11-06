@@ -4,6 +4,7 @@ import {hex} from './vault-crypto.js';
 import {ProofWorkerClient} from './proof-worker-client.js';
 import {LOCAL_PROOF_FORMAT,PROOF_ACCOUNT,validateProofMessage,proofDigest,verifyLocalProof,proofTreeState} from './local-proof.js';
 import {readAccount} from './account-state.js';
+import {validateReviewDraft,compareDraftState} from './draft-preflight.js';
 import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
 
 export class TestVault {
@@ -185,6 +186,37 @@ export class TestVault {
     });
   }
   get accountCheck(){return this.unlocked&&this.#bindingResult?structuredClone(this.#bindingResult):null;}
+  async reviewTransferDraft(input, endpoint, signal) {
+    const context = this.#capture();
+    const draft = structuredClone(input);
+    validateReviewDraft(draft);
+    if (this.#details.mode !== 'active') fail('RECOVERY');
+    const binding = this.#bindingResult;
+    const account = draft.account.toLowerCase();
+    if (!binding?.matched || binding.account !== account || binding.chainId !== draft.chainId ||
+        binding.walletId !== context.id || this.#details.chainId !== draft.chainId) fail('DRAFT_KEYS');
+    const current = () => {
+      this.#check(context);
+      if (signal?.aborted || binding !== this.#bindingResult) fail('CANCELED');
+    };
+    current();
+    const raw = await this.accountReader({endpoint, account, chainId: draft.chainId, signal});
+    current();
+    return this.#exclusive(async () => {
+      try {
+        const {record,payload} = await this.#load(context);
+        current();
+        if (record.mode !== 'active') fail('RECOVERY');
+        if (payload.journal.length >= MAX_RESERVATIONS) fail('FULL');
+        const state = validateKeySnapshot(raw,draft.chainId,account);
+        compareDraftState(draft,{...state,balanceWei:raw.balanceWei},binding,payload.journal);
+        return {digest:draft.digest, leaf:draft.leaf, blockNumber:state.blockNumber, blockHash:state.blockHash};
+      } catch (error) {
+        if (['AUTH_FAILED','FORMAT','MISSING','ROLLBACK','STORAGE'].includes(error.code)) this.lock('storage');
+        throw error;
+      }
+    });
+  }
   cancelAccountCheck(){
     this.#bindingGeneration++;this.#bindingAbort?.abort();this.#bindingAbort=undefined;
     this.#bindingWorker?.dispose();this.#bindingWorker=undefined;this.#bindingResult=undefined;

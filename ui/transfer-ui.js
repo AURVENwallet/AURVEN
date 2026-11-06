@@ -13,6 +13,44 @@ let confirmedAccount;
 let verifiedDemo;
 let demoLoading=false;
 let trackingState;
+let reviewDraft;
+let reviewController;
+
+function clearReview() {
+  reviewController?.abort();
+  reviewController = undefined;
+  get('reviewBlock').textContent = '';
+  get('reviewStatus').textContent = '';
+  get('reviewDraft').disabled = !(reviewDraft && draft?.stateSource === 'rpc-snapshot');
+}
+
+export function connectDraftReview(check) {
+  reviewDraft = check;
+  clearReview();
+  document.addEventListener('aurven:key-check-cleared',clearReview);
+}
+
+get('reviewDraft').onclick = async () => {
+  if (!draft || !reviewDraft || reviewController) return;
+  const request = new AbortController();
+  reviewController = request;
+  get('reviewDraft').disabled = true;
+  get('reviewBlock').textContent = '';
+  get('reviewStatus').textContent = '正在复核草稿和密钥使用记录…';
+  try {
+    const result = await reviewDraft(draft,field('rpc').value.trim(),request.signal);
+    if (request.signal.aborted) return;
+    get('reviewStatus').textContent = '草稿在此区块通过复核，叶号尚未预留。';
+    get('reviewBlock').textContent = ' #' + BigInt(result.blockNumber);
+  } catch (error) {
+    if (!request.signal.aborted) get('reviewStatus').textContent = error.message;
+  } finally {
+    if (reviewController === request) {
+      reviewController = undefined;
+      get('reviewDraft').disabled = false;
+    }
+  }
+};
 
 // A public host has no access to the visitor's locally generated demo record.
 // Keep the complete signed-demo flow on the visitor's own loopback preview.
@@ -31,6 +69,7 @@ function invalidate() {
   controller?.abort();
   if(demoLoading){demoLoading=false;get('demoStatus').textContent='载入已取消，可重新载入演示账户。';}
   draft = undefined;
+  clearReview();
   get('exportTransfer').disabled = true;
   get('transferResult').textContent = '交易信息已修改，请重新生成摘要。';
   get('accountStatus').textContent = '账户状态待同步';
@@ -156,6 +195,7 @@ form.onsubmit = async event => {
       state ? '已按链上快照生成草稿。签名前仍需预留叶号。' : '离线草稿使用手动状态，签名前须同步账户。'
     ].join('\n\n');
     get('exportTransfer').disabled = false;
+    clearReview();
   } catch (error) {
     if (requestVersion === version) get('transferResult').textContent = error.message;
   } finally {

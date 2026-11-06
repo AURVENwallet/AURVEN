@@ -6,6 +6,14 @@ const el=id=>document.getElementById(id);
 const status=el('vaultStatus');
 let vault,busy=false,details,building=false,signing=false,lastProof,checkingKeys=false;
 const errors={
+  DRAFT_SOURCE:'请使用链上同步模式重新生成草稿。',
+  DRAFT_FORMAT:'草稿字段无效，请重新生成。',
+  DRAFT_DIGEST:'交易内容与草稿摘要不符，请重新生成。',
+  DRAFT_KEYS:'请先用当前密钥库核验这个账户的密钥根。',
+  DRAFT_STALE:'账户状态已变化，请重新同步并生成草稿。',
+  DRAFT_DEADLINE:'草稿已过期或超出合约允许的时间，请重新生成。',
+  DRAFT_BALANCE:'当前测试账户余额不足或余额数据无效。',
+  DRAFT_LEAF:'本机使用日志已记录此叶号或更高叶号，请核对账户状态。',
   PASSWORD:'密码至少需要 12 个字符，请使用独立的长密码。',
   PASSWORD_MATCH:'两次输入的密码不一致。',
   AUTH_FAILED:'密码错误或备份已损坏，未解锁任何密钥。',
@@ -84,7 +92,16 @@ function renderAccountCheck(){
   el('accountKeyTime').textContent=new Date(result.checkedAt).toLocaleString();
   el('accountKeyRecovery').hidden=result.mode!=='recovery-readonly';
 }
-function clearAccountCheck(){vault?.cancelAccountCheck();renderAccountCheck();}
+function notifyKeyChange(){document.dispatchEvent(new Event('aurven:key-check-cleared'));}
+function clearAccountCheck(){vault?.cancelAccountCheck();notifyKeyChange();renderAccountCheck();}
+export async function reviewTransferDraft(draft,endpoint,signal) {
+  try {
+    if (!vault?.unlocked) throw {code:'LOCKED'};
+    return await vault.reviewTransferDraft(draft,endpoint,signal);
+  } catch (error) {
+    throw new Error(errors[error.code] ?? '草稿复核失败，请检查测试网络和节点后重试。');
+  }
+}
 el('accountKeyForm').addEventListener('input',()=>{
   clearAccountCheck();el('accountKeyStatus').textContent='信息已修改，请重新核验。';
 });
@@ -98,6 +115,7 @@ document.addEventListener('aurven:check-account-keys',event=>{
 el('accountKeyForm').addEventListener('submit',async event=>{
   event.preventDefault();if(busy||!vault?.unlocked)return;
   busy=true;checkingKeys=true;vault.cancelAccountCheck();
+  notifyKeyChange();
   el('accountKeyProgressBox').hidden=false;el('accountKeyProgress').value=0;el('accountKeyPercent').textContent='0%';
   el('accountKeyStatus').textContent='读取账户并重建对应密钥树，完成后会再次核对链上状态。';render();
   try{
@@ -201,6 +219,7 @@ window.addEventListener('pageshow',()=>{vault?.lock('navigation');render();});
 try{
   if(!isSecureContext||!crypto.subtle||!navigator.locks)throw {code:'UNSUPPORTED'};
   vault=new TestVault(await openVaultStore(),{onLock:reason=>{
+    notifyKeyChange();
     el('accountKeyProgressBox').hidden=true;
     el('accountKeyStatus').textContent='密钥库已锁定，核验结果已清除。';
     lastProof=undefined;el('proofBuildProgress').hidden=true;

@@ -4,16 +4,16 @@ AURVEN is an experimental local/testnet prototype. This repository is not an ind
 
 The checks below are a pre-publication record, not a production security certification or proof of post-quantum strength.
 
-## Release checks — 2026-11-05
+## Release checks
 
 | Check | Result / scope |
 | --- | --- |
 | Solidity tests | 43 passed, including chain restrictions, tampering, replay, expiry, rotation, interoperability and multisig behavior. |
-| Client and UI tests | 98 tests cover account snapshots, transfer validation, flow simulation, signing reservation, receipt validation, localization, encrypted vault, verification-only worker signing, offline proof verification persistent read-only transaction tracking and account key-root comparison. Compile contracts before running client tests. |
+| Client and UI tests | 105 tests as of 2026-11-06. Coverage includes account snapshots, transfer validation, flow simulation, signing reservations, receipt validation, localization, the encrypted vault, verification-only worker signing, offline proof verification, persistent read-only transaction tracking, account key-root comparison and unsigned draft review. Compile contracts before running client tests. |
 | Reproducible source | A clean staged-source copy builds and passes contract tests. Solidity source bytes are preserved by .gitattributes because metadata contributes to the pinned runtime hash. |
 | Runtime pin | Compiled BscTestAccount checked against ui/contract-pin.js. |
 | Secret scan | Gitleaks 8.30.1 scanned the public source snapshot with redacted output; no findings in that scan. Tool archive SHA-256 was checked against the official release checksums. |
-| Dependency advisory query | OSV query for npm three@0.187.0 returned no matching advisories on this date. This is a database result, not proof that the dependency has no vulnerabilities. |
+| Dependency advisory query | An OSV query for npm three@0.187.0 returned no matching advisories on 2026-11-05. |
 | Browser checks | Chinese / English navigation, dynamic results, local receipts and form-state retention checked. Vault acceptance includes six actual IndexedDB / Web Locks checks, creation, wrong-password rejection, encrypted download, read-only import and locked reload. Signature self-check acceptance covers a full worker-generated tree, actual signatures, tamper rejection, public proof export, cancellation, resumed leaf indices and mobile layout. Activity acceptance adds four IndexedDB checks, six real local-chain receipts, saved-history reload, RPC URL non-persistence, public export and mobile layout. Account-key acceptance checks an actual Anvil root match from a restored read-only vault, unchanged usage counts, cancellation and locked-result clearing. Three browser localization checks cover textarea hints without changing message values. |
 | Page policy | CSP restricts scripts to local files and the exact import-map hash, without unsafe-inline or unsafe-eval for scripts; objects, base URLs and native form submissions are blocked. RPC connections remain available to HTTPS endpoints and explicit loopback HTTP addresses. |
 | Publication boundary | Runtime keys, leaf journals, local receipts, environment files, logs, dependency caches and build artifacts are excluded. Public deterministic test vectors remain intentionally available for reproduction. |
@@ -21,6 +21,8 @@ The checks below are a pre-publication record, not a production security certifi
 Scanner: [Gitleaks 8.30.1](https://github.com/gitleaks/gitleaks/releases/tag/v8.30.1). Dependency data: [OSV API](https://api.osv.dev/v1/query). The current automated workflow runs source checks, secret scanning, contract tests, runtime-pin verification and client tests. Workflow actions are pinned to commit IDs and receive read-only repository permissions.
 
 ## Known limitations
+
+- **Unsigned draft review.** A result applies to the RPC block shown and the authenticated journal read from the active vault. Another device may have signed offline, the chain may reorganize, or a different tab may reserve the leaf afterwards. A future transaction signer must recheck state and commit its own reservation before releasing a signature.
 
 - **Cryptography:** the custom stateful WOTS/Merkle scheme uses 16-byte elements. Its parameters and quantum-security bounds require specialist evaluation. No security level is asserted here.
 - **One-time keys:** a leaf must never sign two different digests. The disposable demo journals before returning signatures. The browser vault adds strict IndexedDB transactions, cross-tab Web Locks and compare-and-swap. Its verification-only message signer commits a reservation before sending the worker a sign command, validates the returned context and independently checks the proof. Account transaction signing is still not connected. No vault entry is reclaimed after a failed or reverted transaction. Each demo script invocation still creates fresh keys rather than resuming an old run.
