@@ -1,6 +1,7 @@
+import {networkGas,verifyNetworkPlanState} from './signing-preflight.js';
 import {accountRpc,readAccount} from './account-state.js';
 import {HASH} from './activity-rpc.js';
-import {previewTrial,checkBeforeSend,q,requireTrial} from './browser-trial.js';
+import {previewTrial,payerAccount,q,requireTrial} from './browser-trial.js';
 import {startTrial,updateTrial} from './browser-trial-store.js';
 import {networkReceipt,compareNetworkReceipts,digestData} from './network-receipt.js';
 import {keccak256} from './lib/keccak.js';
@@ -8,20 +9,26 @@ import {hex} from './test-wallet-core.js';
 
 export {networkReceipt};
 const badSignature='0x'+hex(keccak256(new TextEncoder().encode('BadSignature()'))).slice(0,8);
-export async function previewNetwork(endpoint,{walletId,payer,account,kind,recipient}) {
+export async function previewNetwork(endpoint,{walletId,payer,account,kind,recipient},secondary) {
   requireTrial(['create','send','rotate','fund'].includes(kind),'NET_PLAN');
   const value=kind==='create'||kind==='fund'?3n:0n;
-  const gas=kind==='create'?2400000n:kind==='fund'?45000n:700000n;
+  const gas=networkGas[kind];
   const rpc=accountRpc(endpoint);
-  const plan=await previewTrial(rpc,payer,kind==='send'?recipient:payer,{gas,value});
+  let plan;
+  try {
+    plan=await previewTrial(rpc,payer,kind==='send'?recipient:payer,{gas,value});
+  } catch (error) {
+    if (error.message?.startsWith('TRIAL_')) throw error;
+    throw new Error('NET_PREFLIGHT_UNAVAILABLE',{cause:error});
+  }
   Object.assign(plan,{walletId,chainId:97,kind,value:q(value)});
   if (kind!=='create') {
     requireTrial(/^0x[0-9a-f]{40}$/.test(account),'NET_ACCOUNT');
     plan.account=account;
-    plan.snapshot=await readAccount({endpoint,account,chainId:97});
-    requireTrial(plan.snapshot.epoch>0,'NET_ACCOUNT');
-    if (kind==='send') requireTrial(plan.recipient!==account && BigInt(plan.snapshot.balanceWei)>0n,'NET_BALANCE');
   }
+  const checked=await verifyNetworkPlanState(plan,endpoint,secondary);
+  if (checked.snapshot) plan.snapshot=checked.snapshot;
+  plan.reviewBlock=checked.reviewBlock;
   return plan;
 }
 export function needsReceiptCheck(row) {
@@ -54,17 +61,21 @@ export function retainNetworkHistory(rows,plan) {
   requireTrial(index>=0,'NET_HISTORY_FULL');
   return rows.filter((_,i)=>i!==index);
 }
-export async function submitNetwork({endpoint,store,provider,plan,authorize,walletId}) {
-  const rpc=accountRpc(endpoint);
+export async function submitNetwork({endpoint,secondary,store,provider,plan,authorize,walletId}) {
+  requireTrial(plan.reviewBlock && (plan.kind==='create' || plan.snapshot),'DRAFT_STALE');
   requireTrial(walletId()===plan.walletId,'NET_VAULT');
-  await checkBeforeSend(rpc,provider,plan);
+  requireTrial(await payerAccount(provider)===plan.payer,'TRIAL_PAYER');
+  await verifyNetworkPlanState(plan,endpoint,secondary);
   await startTrial(store,plan,retainNetworkHistory);
-  let requested=false;
+  let requested=false,leafReserved=false;
   try {
     const {data,intent}=plan.kind==='fund'?{data:'0x',intent:null}:await authorize(plan);
+    leafReserved=plan.kind!=='fund';
     requireTrial(walletId()===plan.walletId,'NET_VAULT');
-    await checkBeforeSend(rpc,provider,plan);
+    await verifyNetworkPlanState(plan,endpoint,secondary);
+    requireTrial(await payerAccount(provider)===plan.payer,'TRIAL_PAYER');
     await updateTrial(store,plan.id,row=>({...row,status:'requested',dataHash:digestData(data),intent}));
+    requireTrial(walletId()===plan.walletId,'NET_VAULT');
     requested=true;
     const tx={from:plan.payer,nonce:plan.nonce,chainId:'0x61',gas:plan.gas,gasPrice:plan.gasPrice,value:plan.value,data};
     if (plan.kind!=='create') tx.to=plan.account;
@@ -74,9 +85,10 @@ export async function submitNetwork({endpoint,store,provider,plan,authorize,wall
       status:row.status==='requested'?'waiting':row.status,hash:row.hash??hash.toLowerCase()}));
   } catch (e) {
     if (requested && e.code!==4001) throw new Error('TRIAL_REPLY',{cause:e});
+    leafReserved=leafReserved || e.leafReserved===true;
     await updateTrial(store,plan.id,row=>{
       if (requested && row.status!=='requested') return row;
-      return {...row,checkToken:null,status:requested?'declined':'stopped'};
+      return {...row,checkToken:null,leafReserved,status:requested?'declined':'stopped'};
     });
     throw e;
   }

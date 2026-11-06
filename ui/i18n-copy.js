@@ -1,5 +1,13 @@
 // UI copy only. Protocol identifiers, addresses and exported data are not localized.
 export const english = Object.freeze({
+  '密钥代数':'Key epoch',
+  '链上密钥状态':'On-chain key state','链上起始叶号':'On-chain next leaf',
+  '本次签名叶已预留，后续不会用于签署其他请求。':'The signing leaf stays reserved and cannot sign another request.',
+  '双节点核对区块':'Block checked by both nodes','正在复核账户状态，再打开付款钱包…':'Rechecking the account before opening the payer wallet…',
+  '未能从两个测试网节点核实签名前状态，请稍后重新预览。':'Both testnet nodes must verify the signing state. Preview again later.',
+  '两个节点报告的账户状态不同，请稍后重新预览。':'The nodes report different account states. Preview again later.',
+  '两个节点无法确认同一区块，请稍后重新预览。':'The nodes could not confirm the same block. Preview again later.',
+  '预计的建户地址已被占用，请重新预览。':'A predicted deployment address is already in use. Preview again.',
   '请重新核对建户回执，两个节点一致后再继续。':'Check the account creation receipt again. Both nodes must agree before continuing.',
   '最新账户状态（主节点）':'Latest account state (primary node)','主节点只读模拟':'Read-only simulation on the primary node',
   '公开测试回执':'Public test receipt','用两个测试网节点核对已发布的 1 wei 转账，无需连接钱包。':'Check a published 1 wei transfer with two testnet nodes. No wallet connection is needed.',

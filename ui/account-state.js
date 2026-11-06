@@ -48,6 +48,10 @@ export async function readAccount({endpoint, account, chainId, signal}) {
     throw new Error('RPC 链号与所选网络不同');
   }
   const block = await rpc('eth_getBlockByNumber', ['latest', false]);
+  return readAccountAt(rpc,account,chainId,block);
+}
+
+export async function readAccountAt(rpc,account,chainId,block) {
   if (!block || !/^0x[0-9a-f]+$/i.test(block.number) || !wordPattern.test(block.hash) ||
       !/^0x[0-9a-f]+$/i.test(block.timestamp)) throw new Error('区块数据格式无效');
   const timestamp = Number(BigInt(block.timestamp));
@@ -74,7 +78,7 @@ export async function readAccount({endpoint, account, chainId, signal}) {
     throw new Error('账户状态超出支持范围');
   }
   const confirmed = await rpc('eth_getBlockByNumber', [block.number, false]);
-  if (confirmed?.hash !== block.hash) throw new Error('读取期间区块发生变化，请重新同步');
+  if (confirmed?.number !== block.number || confirmed?.hash !== block.hash) throw new Error('读取期间区块发生变化，请重新同步');
   return {
     account, chainId, epoch, next, pubSeed: seedWord.slice(0, 34), root: rootWord.slice(0, 34),
     balanceWei: BigInt(balance).toString(), blockNumber: block.number, blockHash: block.hash,

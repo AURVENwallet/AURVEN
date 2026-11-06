@@ -1,3 +1,4 @@
+import {testnetClients,latestTestnetHead,alignedTestnetHeads} from './testnet-heads.js';
 import {accountRpc} from './account-state.js';
 import {ADDRESS,HASH,executionEvents} from './activity-rpc.js';
 import {findByNonce,hashBytes,requireTrial} from './browser-trial.js';
@@ -50,21 +51,10 @@ function verifyEvents(receipt,row) {
   }
 }
 
-async function receiptHead(rpc,tag='latest') {
-  const head=await rpc('eth_getBlockByNumber',[tag,false]);
-  valid(head && quantity.test(head.number) && (tag==='latest' || head.number===tag) &&
-    HASH.test(head.hash) && quantity.test(head.timestamp) && Math.abs(Date.now()/1000-Number(BigInt(head.timestamp)))<120);
-  return head;
-}
-async function latestHead(rpc) {
-  requireTrial(await rpc('eth_chainId')==='0x61','TRIAL_CHAIN');
-  return receiptHead(rpc);
-}
-
 // The receipt readers have no signer, injected wallet or encrypted vault dependency.
 export async function networkReceipt(endpoint,row,manualHash) {
   const rpc=accountRpc(endpoint,AbortSignal.timeout(45000));
-  return retryIndexRead(async()=>observe(rpc,await latestHead(rpc),row,manualHash));
+  return retryIndexRead(async()=>observe(rpc,await latestTestnetHead(rpc),row,manualHash));
 }
 async function observe(rpc,head,row,manualHash) {
   const height=BigInt(head.number);
@@ -163,25 +153,14 @@ async function observe(rpc,head,row,manualHash) {
 
 // Pin both reads to the same height, even if one provider is already a few blocks ahead.
 export async function compareNetworkReceipts(primary,secondary,row,manualHash) {
-  requireTrial(new URL(primary).origin!==new URL(secondary).origin,'NET_SOURCES');
   if (manualHash) requireTrial(HASH.test(manualHash),'TRIAL_HASH');
   const signal=AbortSignal.timeout(45000);
-  const clients=[accountRpc(primary,signal),accountRpc(secondary,signal)];
+  const clients=testnetClients(primary,secondary,signal);
   return retryIndexRead(first=>compareAtCommonHead(clients,row,manualHash,first));
 }
 async function compareAtCommonHead(clients,row,manualHash,first) {
-  const heads=await Promise.allSettled(clients.map(latestHead));
-  const ready=heads.map(entry=>entry.status==='fulfilled'?entry.value:null);
-  if (ready[0] && ready[1]) {
-    const lower=BigInt(ready[0].number)<=BigInt(ready[1].number)?0:1;
-    const higher=1-lower, block=ready[lower].number;
-    if (ready[higher].number!==block) {
-      try {ready[higher]=await receiptHead(clients[higher],block);} catch {ready[higher]=null;}
-    }
-    if (ready[higher] && (!same(ready[0].hash,ready[1].hash) || BigInt(ready[0].timestamp)!==BigInt(ready[1].timestamp))) {
-      return {check:{kind:'conflict',reason:'block',block}};
-    }
-  }
+  const {aligned:ready,conflict}=await alignedTestnetHeads(clients);
+  if (conflict) return {check:{kind:'conflict',reason:'block',block:ready[0].number}};
   const reads=await Promise.allSettled(clients.map((rpc,i)=>ready[i]?observe(rpc,ready[i],row,manualHash):null));
   if (first && reads.some(entry=>entry.reason?.message==='NET_INDEXING')) throw new Error('NET_INDEXING');
   const [a,b]=reads.map(entry=>entry.status==='fulfilled'?entry.value:null);

@@ -4,7 +4,7 @@ import {addressBytes,addressWord,concat,word} from './lib/evmwots.js';
 import {hex} from './test-wallet-core.js';
 import {accountCodeHash} from './contract-pin.js';
 
-export const trialEndpoint='https://bsc-testnet.bnbchain.org';
+export {primaryTestnet as trialEndpoint} from './testnet-heads.js';
 const gasLimit=3000000n;
 const completedTopic='0x'+hex(keccak256(new TextEncoder().encode('TrialCompleted(address,address,address)')));
 const topicAddress=address=>'0x'+hex(addressWord(address));

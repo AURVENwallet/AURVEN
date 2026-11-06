@@ -60,7 +60,7 @@ node scripts/local-wallet.mjs</code></pre>
 <label id="netAccountField" hidden>智能账户<select id="netAccount"></select></label>
 <label id="netToField" hidden>收款地址<input id="netTo" placeholder="0x…" maxlength="42" autocomplete="off"></label>
 <button id="netPreview" type="button">预览操作</button></div>
-<div id="netReview" hidden><dl class="trial-values"><dt>操作</dt><dd id="netAction"></dd><dt>智能账户</dt><dd id="netAddress"></dd><dt>付款钱包</dt><dd id="netPayer"></dd><dt>资金去向</dt><dd id="netDestination"></dd><dt>请求的手续费上限</dt><dd id="netFee"></dd></dl><button id="netConfirm" type="button" class="run">确认并打开付款钱包</button></div>
+<div id="netReview" hidden><dl class="trial-values"><dt>操作</dt><dd id="netAction"></dd><dt>智能账户</dt><dd id="netAddress"></dd><dt>付款钱包</dt><dd id="netPayer"></dd><dt>双节点核对区块</dt><dd id="netCheckedBlock"></dd><dt id="netKeyStateLabel" hidden>链上密钥状态</dt><dd id="netKeyState" hidden></dd><dt>资金去向</dt><dd id="netDestination"></dd><dt>请求的手续费上限</dt><dd id="netFee"></dd></dl><button id="netConfirm" type="button" class="run">确认并打开付款钱包</button></div>
 <output id="netStatus" class="demo-status" aria-live="polite">仅供测试网研究。备份恢复后仅可查看。</output>
 <div id="netHistory" hidden><div class="trial-form"><label>操作记录<select id="netRecords"></select></label><button id="netCheck" type="button">双节点核对回执</button><button id="netOld" type="button" hidden>只读验证旧授权</button></div>
 <label id="netManual" hidden>付款钱包里的交易哈希（可选）<input id="netHash" placeholder="0x…" maxlength="66"></label>

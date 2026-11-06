@@ -1,3 +1,4 @@
+import {secondaryTestnet as secondary} from './testnet-heads.js';
 import {networkWalletId,authorizeNetwork} from './vault-ui.js';
 import {openVaultStore} from './vault-store.js';
 import {trialEndpoint,payerAccount,inTbnb} from './browser-trial.js';
@@ -6,7 +7,7 @@ import {compareNetworkReceipts} from './network-receipt.js';
 import {readAccount} from './account-state.js';
 
 const el=id=>document.getElementById(id),endpoint=trialEndpoint;
-const secondary='https://bsc-testnet-dataseed.bnbchain.org';
+
 const exampleHash='0xd4375fec221a613bbe4caddc53fc04b00c6eb64214d5e5b87913b3f3e556a953';
 const example={
   kind:'send',hash:exampleHash,
@@ -20,7 +21,10 @@ const kinds={create:'建户并存入 3 wei',send:'转出 1 wei',rotate:'轮换�
 const states={pending:'付款钱包已提交，当前节点仍在等待打包。',unseen:'当前节点未找到这笔交易。请稍后再核对，或从付款钱包复制交易哈希。',
   replaced:'相同付款序号已被另一笔不同内容的交易使用。',reorg:'原回执所在区块已被替换，当前链上尚未核实这笔操作。',
   expired:'截至核对区块未发现已打包的付款，签名授权已过期。',preparing:'准备中',requested:'等待核对付款结果',waiting:'等待链上回执。',included:'交易回执已核对',declined:'付款请求已取消。',stopped:'准备已停止，尚未请求付款。',reverted:'交易已打包，但执行失败。'};
-const errors={NET_ACCOUNT_CHECK:'请重新核对建户回执，两个节点一致后再继续。',NET_CHECK_AGAIN:'另一处已更新此记录，请重新核对。',NET_UNVERIFIED:'本次核对未取得一致的链上证据，请稍后重试。',
+const errors={NET_PREFLIGHT_UNAVAILABLE:'未能从两个测试网节点核实签名前状态，请稍后重新预览。',
+  NET_PREFLIGHT_STATE:'两个节点报告的账户状态不同，请稍后重新预览。',
+  NET_PREFLIGHT_FORK:'两个节点无法确认同一区块，请稍后重新预览。',NET_SETUP_OCCUPIED:'预计的建户地址已被占用，请重新预览。',
+  NET_ACCOUNT_CHECK:'请重新核对建户回执，两个节点一致后再继续。',NET_CHECK_AGAIN:'另一处已更新此记录，请重新核对。',NET_UNVERIFIED:'本次核对未取得一致的链上证据，请稍后重试。',
   NET_ACCOUNT_LIMIT:'本浏览器最多可保存 8 个可复用测试账户，请使用已有账户。',
   NET_HISTORY_FULL:'交易历史已满，请先核对尚未确认的回执。',NET_VAULT:'请先解锁链 97 的原始测试密钥库。',RECOVERY:'只读备份无法签名。',LOCKED:'请先解锁链 97 的原始测试密钥库。',
   BUSY:'另一个页面正在保存密钥库，请稍后重试。',FULL:'一次性密钥记录已达到本版本上限，已停止操作。',
@@ -64,6 +68,7 @@ function render(){
     details.unshift(checkMessage(row.receiptCheck));
   }
   if (row.status==='replaced' && ['send','rotate'].includes(row.kind)) details.push('签名叶已保留。在授权有效期内，其他付款方仍可能提交原授权。');
+  if (row.leafReserved) details.push('本次签名叶已预留，后续不会用于签署其他请求。');
   if (row.equivalent) details.push('相同操作以新的交易哈希打包。');
   if (row.moved) details.push('同一笔交易已在另一个区块重新打包。');
   if (['included','reverted'].includes(row.status) && row.feeWei!=null) details.push('Gas '+row.gasUsed,inTbnb(row.feeWei));
@@ -119,6 +124,9 @@ el('netPreview').onclick=()=>action(async()=>{
   if (kind!=='create' && !records.some(r=>r.kind==='create'&&r.walletId===walletId&&r.account===account&&r.status==='included'&&!needsReceiptCheck(r))) throw new Error('NET_ACCOUNT');
   if (await payerAccount(window.ethereum)!==payer) throw new Error('TRIAL_PAYER');
   plan=await previewNetwork(endpoint,{walletId,payer,account,kind,recipient:el('netTo').value.trim()});
+  el('netCheckedBlock').textContent='#'+BigInt(plan.reviewBlock.number);
+  el('netKeyStateLabel').hidden=el('netKeyState').hidden=!plan.snapshot;
+  if (plan.snapshot) el('netKeyState').textContent='密钥代数 '+plan.snapshot.epoch+' · 链上起始叶号 '+plan.snapshot.next;
   el('netAction').textContent=kinds[kind];el('netAddress').textContent=plan.account;el('netPayer').textContent=payer;
   el('netDestination').textContent=kind==='rotate'?'仅轮换密钥':(kind==='send'?plan.recipient+' · 1 wei':plan.account+' · 3 wei');
   el('netFee').textContent=inTbnb(BigInt(plan.gas)*BigInt(plan.gasPrice));
@@ -130,7 +138,7 @@ el('netConfirm').onclick=()=>action(async()=>{
     const row=await submitNetwork({endpoint,store:await storage(),provider:window.ethereum,plan:approved,walletId:networkWalletId,
       authorize:async p=>{
         const result=await authorizeNetwork(p,n=>status('浏览器正在生成一次性签名… '+Math.round(n*100)+'%'));
-        status('请在付款钱包中核对并确认。');return result;
+        status('正在复核账户状态，再打开付款钱包…');return result;
       }});
     await check(row);
   }finally{reset();await refresh(approved.id);}

@@ -13,12 +13,14 @@ import {decryptPayload} from '../ui/vault-crypto.js';
 import {createdAddress} from '../ui/browser-trial.js';
 
 test('vault signs only after the encrypted leaf commit and refuses a restored copy',async t=>{
-  let current,denyWrite=true,signed=0;
+  let current,denyWrite=true,signed=0,checks=0,blockBeforeCommit=true;
   const store={name:'network-order',read:async()=>current,create:async r=>{current=r;},
     compareAndSwap:async(old,next)=>{assert.equal(old,current);if(denyWrite)throw new Error('write refused');current=next;}};
   const locks={request:(_name,_opts,fn)=>fn({})};
   const password=randomBytes(20).toString('hex');
-  const vault=new TestVault(store,{locks,networkWorkerFactory:()=>{
+  const vault=new TestVault(store,{locks,networkPreflight:async()=>{
+    if (++checks===2 && blockBeforeCommit) throw new Error('NET_PREFLIGHT_STATE');
+  },networkWorkerFactory:()=>{
     let key,digest;
     return {dispose(){},async request(type,payload){
       if(type==='prepare'){
@@ -35,6 +37,10 @@ test('vault signs only after the encrypted leaf commit and refuses a restored co
   const {walletId}=await vault.create(password,97);
   const payer='0x'+'12'.repeat(20),wrapper=createdAddress(payer,0),account=createdAddress(wrapper,1);
   const plan={kind:'create',value:'0x3',payer,recipient:payer,wrapper,nonce:'0x0',account,chainId:97,walletId,deadline:Math.floor(Date.now()/1000)+300};
+  const initialRevision=current.revision;
+  await assert.rejects(vault.authorizeNetworkAction(plan),/NET_PREFLIGHT_STATE/);
+  assert.equal(current.revision,initialRevision);assert.equal(signed,0);
+  blockBeforeCommit=false;
   await assert.rejects(vault.authorizeNetworkAction(plan),/write refused/);assert.equal(signed,0);
   denyWrite=false;await assert.rejects(vault.authorizeNetworkAction(plan),/worker interrupted/);assert.equal(signed,1);
   await assert.rejects(vault.authorizeNetworkAction(plan),/USED/);assert.equal(signed,1);
@@ -69,7 +75,7 @@ test('reserved leaves advance independently of the confirmed counter and of the 
 
 test('one chain-97 account executes separate transfers, rotates, rejects the previous authorization and spends with the new key',{timeout:240000},async t=>{
   const node=await startLocalNode(undefined,0,97);t.after(()=>node.close());
-  const endpoint=node.endpoint,rpc=accountRpc(endpoint);
+  const endpoint=node.endpoint,secondary=endpoint.replace('127.0.0.1','localhost'),rpc=accountRpc(endpoint);
   const payer='0x'+randomBytes(20).toString('hex'),recipient='0x'+randomBytes(20).toString('hex'),walletId=hex(randomBytes(16));
   await rpc('anvil_setBalance',[payer,'0xde0b6b3a7640000']);await rpc('anvil_impersonateAccount',[payer]);
   const trees=Array.from({length:3},()=>EvmTreeKey.generate(randomBytes(32),randomBytes(16)));
@@ -87,9 +93,11 @@ test('one chain-97 account executes separate transfers, rotates, rejects the pre
     validateIntent(plan,intent,leaf);journal.push({pubSeed:intent.seed,root:intent.root,leaf});
     return {intent,data:encodeNetworkAction(plan,intent,tree.sign(leaf,best.digest),init)};
   };
+  // Anvil mines on demand. Refresh its head after building the test trees.
+  await rpc('evm_mine');
   for (const kind of ['create','send','send','rotate','send','fund']) {
-    const plan=await previewNetwork(endpoint,{payer,recipient,kind,account,walletId});account=plan.account;
-    const row=await submitNetwork({endpoint,store,provider,plan,authorize,walletId:()=>walletId});
+    const plan=await previewNetwork(endpoint,{payer,recipient,kind,account,walletId},secondary);account=plan.account;
+    const row=await submitNetwork({endpoint,secondary,store,provider,plan,authorize,walletId:()=>walletId});
     let result;
     for (let i=0;i<30;i++) {
       result=await networkReceipt(endpoint,row);
@@ -111,13 +119,13 @@ test('one chain-97 account executes separate transfers, rotates, rejects the pre
   // Fork the same signed transfer through the actual Anvil pool and alternative block histories.
   await rpc('evm_setAutomine',[false]);
   const checkpoint=await rpc('evm_snapshot');
-  const nextPlan=await previewNetwork(endpoint,{payer,recipient,kind:'send',account,walletId});
+  const nextPlan=await previewNetwork(endpoint,{payer,recipient,kind:'send',account,walletId},secondary);
   let originalTx;
   const capture={request:request=>{
     if (request.method==='eth_sendTransaction') originalTx=structuredClone(request.params[0]);
     return provider.request(request);
   }};
-  const send=await submitNetwork({endpoint,store,provider:capture,plan:nextPlan,authorize,walletId:()=>walletId});
+  const send=await submitNetwork({endpoint,secondary,store,provider:capture,plan:nextPlan,authorize,walletId:()=>walletId});
   const journalBefore=structuredClone(journal);
   const check=()=>reconcileNetwork(store,endpoint,send.id);
   assert.equal((await check()).status,'pending');

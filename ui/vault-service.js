@@ -7,7 +7,7 @@ import {validateReviewDraft,compareDraftAccount,compareDraftState,nextTransferLe
 import {localSimulationEndpoint,reservedRow,simulateLocalProof} from './local-transfer.js';
 import {validateKeySnapshot,validateDerivedRoot,keyStateEqual} from './account-key-check.js';
 import {encodeNetworkAction,setup,spendingLeaf,validateIntent,validateNetworkPlan} from './vault-network-proof.js';
-import {trialEndpoint} from './browser-trial.js';
+import {verifyNetworkPlanState} from './signing-preflight.js';
 
 export class TestVault {
   #key;#walletId;#revision=0;#generation=0;#timer;#deadline=0;#details=null;#observed=new Map();
@@ -16,13 +16,13 @@ export class TestVault {
   #reserved;#simulationAbort;
   #networkWorker;
   constructor(store,{locks=globalThis.navigator?.locks,now=()=>performance.now(),idleMs=120000,onLock=()=>{},workerFactory=()=>new ProofWorkerClient(),
-    bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,
+    bindingWorkerFactory=()=>new ProofWorkerClient(new URL('./account-key-worker.js',import.meta.url)),accountReader=readAccount,networkPreflight=verifyNetworkPlanState,
     transferWorkerFactory=()=>new ProofWorkerClient(new URL('./local-transfer-worker.js',import.meta.url)),
     networkWorkerFactory=()=>new ProofWorkerClient(new URL('./vault-network-worker.js',import.meta.url))}={}){
     if(!locks?.request||!Number.isFinite(idleMs)||idleMs<=0)fail('UNSUPPORTED');
     this.store=store;this.locks=locks;this.now=now;this.idleMs=idleMs;this.onLock=onLock;this.workerFactory=workerFactory;
     this.bindingWorkerFactory=bindingWorkerFactory;this.accountReader=accountReader;this.transferWorkerFactory=transferWorkerFactory;
-    this.networkWorkerFactory=networkWorkerFactory;
+    this.networkWorkerFactory=networkWorkerFactory;this.networkPreflight=networkPreflight;
   }
   get unlocked(){if(this.#key&&this.now()>=this.#deadline)this.lock('idle');return !!this.#key;}
   get details(){return this.#details?{...this.#details,unlocked:this.unlocked}:null;}
@@ -200,11 +200,7 @@ export class TestVault {
     if (context.id!==plan.walletId) fail('NET_KEYS');
     const fresh=async()=>{
       this.#check(context);validateNetworkPlan(plan);
-      if (setup(plan.kind)) return;
-      const s=await this.accountReader({endpoint:trialEndpoint,account:plan.account,chainId:97});
-      if (s.codeHash!==plan.snapshot.codeHash || s.root!==plan.snapshot.root || s.pubSeed!==plan.snapshot.pubSeed ||
-          s.epoch!==plan.snapshot.epoch || s.next!==plan.snapshot.next ||
-          (plan.kind==='send' && BigInt(s.balanceWei)<1n)) fail('DRAFT_STALE');
+      await this.networkPreflight(plan);
       this.#check(context);
     };
     return this.#exclusive(async()=>{
@@ -214,6 +210,7 @@ export class TestVault {
       await fresh();
       const leaf=spendingLeaf(plan,payload.journal),worker=this.networkWorkerFactory();
       this.#networkWorker=worker;
+      let reserved=false;
       try {
         const intent=await worker.request('prepare',{record,key:context.key,plan,leaf},progress);
         this.#check(context);validateIntent(plan,intent,leaf);
@@ -224,7 +221,7 @@ export class TestVault {
         await fresh();
         payload.journal.push(row);
         const updated=await encryptPayload(payload,context.key,{...record,revision:record.revision+1});
-        this.#check(context);await this.store.compareAndSwap(record,updated);this.#check(context);
+        this.#check(context);await this.store.compareAndSwap(record,updated);reserved=true;this.#check(context);
         this.#remember(updated);this.#revision=updated.revision;this.#setDetails(updated,payload);
         const proof=await worker.request('sign',{digest:row.digest});
         try {
@@ -237,6 +234,9 @@ export class TestVault {
           await fresh();
           return {data:encodeNetworkAction(plan,intent,proof,init),intent};
         } finally {proof.fill(0);}
+      } catch (error) {
+        if (reserved) error.leafReserved=true;
+        throw error;
       } finally {worker.dispose();if (this.#networkWorker===worker) this.#networkWorker=undefined;}
     });
   }
